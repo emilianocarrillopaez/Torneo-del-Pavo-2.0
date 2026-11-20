@@ -1,0 +1,6 @@
+{
+  "name": "Torneo del Pavo 2026 - Club de Ajedrez Don Gonzalo",
+  "description": "Sitio oficial de registro e información para el Torneo del Pavo 2026 de ajedrez en Corredor Constitución, Durango, Dgo. Organizado por el Club de Ajedrez Don Gonzalo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

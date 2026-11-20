@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .font-festive {
+    font-family: 'Titan One', 'Fredoka', cursive, sans-serif;
+  }
+  .font-round {
+    font-family: 'Fredoka', sans-serif;
+  }
+}
+
+/* Snowflake animation */
+@keyframes snowfall {
+  0% {
+    transform: translateY(-10px) translateX(0) rotate(0deg);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(50vh) translateX(15px) rotate(180deg);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(105vh) translateX(-15px) rotate(360deg);
+    opacity: 0.2;
+  }
+}
+
+.snowflake {
+  position: fixed;
+  top: -20px;
+  color: white;
+  pointer-events: none;
+  z-index: 20;
+  user-select: none;
+  animation-name: snowfall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+/* Christmas lights glow and blink */
+@keyframes twinkle {
+  0%, 100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px currentColor);
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    filter: drop-shadow(0 0 2px currentColor);
+    transform: scale(0.92);
+  }
+}
+
+.light-bulb {
+  animation: twinkle 1.8s infinite ease-in-out;
+}
+
+/* Flyer style text shadow and outline */
+.text-flyer-stroke {
+  text-shadow: 
+    -3px -3px 0 #7c2d12,  
+     3px -3px 0 #7c2d12,
+    -3px  3px 0 #7c2d12,
+     3px  3px 0 #7c2d12,
+     0px  6px 14px rgba(0,0,0,0.7);
+}
+
+.text-flyer-gold {
+  color: #ffde17;
+  text-shadow: 
+    -2px -2px 0 #b45309,  
+     2px -2px 0 #b45309,
+    -2px  2px 0 #b45309,
+     2px  2px 0 #b45309,
+     0px  5px 12px rgba(0,0,0,0.6);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #092617;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e5a39;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ca8a04;
+}

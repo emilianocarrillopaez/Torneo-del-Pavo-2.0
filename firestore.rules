@@ -1,0 +1,123 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\.@\\-]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (
+          request.auth.token.email == 'emilianocarrillopaez@gmail.com' &&
+          request.auth.token.email_verified == true
+        ) ||
+        (
+          request.auth.token.email in [
+            'arbitro@torneodelpavo.com',
+            'comite@torneodelpavo.com',
+            'eduardoroqueta.ajedrez@gmail.com'
+          ]
+        ) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (
+          request.auth.token.email is string &&
+          request.auth.token.email_verified == true &&
+          exists(/databases/$(database)/documents/admins_by_email/$(request.auth.token.email))
+        )
+      );
+    }
+
+    function isValidParticipant(data) {
+      return data.keys().hasAll(['nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria', 'estatusPago', 'fechaRegistro'])
+        && data.nombre is string && data.nombre.size() >= 3 && data.nombre.size() <= 150
+        && data.fechaNacimiento is string && data.fechaNacimiento.size() == 10
+        && data.whatsapp is string && data.whatsapp.size() == 10
+        && data.correo is string && data.correo.size() >= 5 && data.correo.size() <= 100
+        && data.categoria in ['Juvenil', 'Libre', 'Aficionados', 'Rankeado', 'Niños', 'Libre - Aficionados', 'Libre - Rankeado', 'Infantil-Juvenil']
+        && data.estatusPago in ['pendiente', 'pagado']
+        && data.fechaRegistro is string && data.fechaRegistro.size() <= 60
+        && (!('reciboId' in data) || (data.reciboId is string && data.reciboId.size() <= 128))
+        && (!('reciboNombreArchivo' in data) || (data.reciboNombreArchivo is string && data.reciboNombreArchivo.size() <= 180))
+        && (!('tieneRecibo' in data) || data.tieneRecibo is bool);
+    }
+
+    function isValidComprobante(data) {
+      return data.keys().hasAll(['folio', 'participantNombre', 'fileName', 'mimeType', 'imageDataUrl', 'uploadedAt'])
+        && data.folio is string && data.folio.size() >= 4 && data.folio.size() <= 30
+        && data.participantNombre is string && data.participantNombre.size() >= 3 && data.participantNombre.size() <= 150
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 200
+        && data.mimeType is string && data.mimeType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+        && data.imageDataUrl is string && data.imageDataUrl.size() >= 30 && data.imageDataUrl.size() <= 950000
+        && data.uploadedAt is string && data.uploadedAt.size() <= 60;
+    }
+
+    // Participants collection (no receipt image data stored here — only opaque reciboId)
+    match /participantes/{participanteId} {
+      // Allow reading so participants and organizers can view the public roster
+      allow read: if true;
+
+      // Public can register (create) with validation
+      allow create: if isValidId(participanteId)
+        && isValidParticipant(request.resource.data)
+        && request.resource.data.estatusPago == 'pendiente'
+        && (!('website' in request.resource.data) || request.resource.data.website == '');
+
+      // Only admins can update (change payment status, fix details) or delete
+      allow update: if isAdmin() && isValidId(participanteId) && isValidParticipant(request.resource.data);
+      allow delete: if isAdmin() && isValidId(participanteId);
+    }
+
+    // Private payment receipts vault — WRITE-ONLY for public at registration, READ/MANAGE strictly ADMIN-ONLY
+    match /comprobantes/{comprobanteId} {
+      allow read: if isAdmin();
+      allow create: if isValidId(comprobanteId) && isValidComprobante(request.resource.data);
+      allow update, delete: if isAdmin() && isValidId(comprobanteId);
+    }
+
+    // Configuration collection (Tournament settings, texts, and public counts)
+    match /configuracion/{configId} {
+      allow read: if true;
+      allow update: if isAdmin() || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalInscritos'])
+        && request.resource.data.totalInscritos is number
+      );
+      allow create, delete: if isAdmin();
+    }
+
+    // Sponsors collection
+    match /patrocinadores/{patrocinadorId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Admins collections
+    match /admins/{adminId} {
+      allow read: if isSignedIn() && (request.auth.uid == adminId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /admins_by_email/{emailId} {
+      allow read: if isSignedIn() && (
+        (request.auth.token.email is string && request.auth.token.email == emailId) ||
+        isAdmin()
+      );
+      allow write: if isAdmin();
+    }
+
+    // Health check connection test document
+    match /test/{docId} {
+      allow read: if true;
+    }
+  }
+}

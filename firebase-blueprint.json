@@ -1,0 +1,176 @@
+{
+  "entities": {
+    "Participant": {
+      "title": "Participant",
+      "description": "Registered tournament chess player",
+      "type": "object",
+      "properties": {
+        "nombre": {
+          "type": "string",
+          "description": "Full name (Paterno Materno Nombres)",
+          "minLength": 3,
+          "maxLength": 150
+        },
+        "fechaNacimiento": {
+          "type": "string",
+          "description": "Birthdate in YYYY-MM-DD format",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "whatsapp": {
+          "type": "string",
+          "description": "10-digit WhatsApp phone number",
+          "pattern": "^\\d{10}$"
+        },
+        "correo": {
+          "type": "string",
+          "description": "Email address of the participant",
+          "maxLength": 100
+        },
+        "categoria": {
+          "type": "string",
+          "description": "Category for the tournament",
+          "enum": ["Juvenil", "Libre", "Niños", "Aficionados", "Rankeado", "Libre - Aficionados", "Libre - Rankeado"]
+        },
+        "estatusPago": {
+          "type": "string",
+          "description": "Payment status of the registration",
+          "enum": ["pendiente", "pagado"]
+        },
+        "fechaRegistro": {
+          "type": "string",
+          "description": "ISO timestamp of registration"
+        },
+        "folio": {
+          "type": "string",
+          "description": "Unique registration ticket folio number",
+          "maxLength": 20
+        },
+        "esAficionado": {
+          "type": "boolean",
+          "description": "Whether player opts into Best Amateur prize in Libre"
+        },
+        "esFemenil": {
+          "type": "boolean",
+          "description": "Whether player opts into Best Female prize"
+        },
+        "tieneRecibo": {
+          "type": "boolean",
+          "description": "Whether participant uploaded a payment receipt"
+        },
+        "reciboId": {
+          "type": "string",
+          "description": "Opaque reference ID to admin-only /comprobantes/{reciboId}",
+          "maxLength": 128
+        },
+        "reciboNombreArchivo": {
+          "type": "string",
+          "description": "Original filename of uploaded payment receipt",
+          "maxLength": 180
+        }
+      },
+      "required": ["nombre", "fechaNacimiento", "whatsapp", "correo", "categoria", "estatusPago", "fechaRegistro"]
+    },
+    "PaymentReceipt": {
+      "title": "PaymentReceipt",
+      "description": "Admin-only stored payment receipt image and metadata",
+      "type": "object",
+      "properties": {
+        "participantId": { "type": "string", "maxLength": 128 },
+        "folio": { "type": "string", "maxLength": 30 },
+        "participantNombre": { "type": "string", "maxLength": 150 },
+        "fileName": { "type": "string", "maxLength": 200 },
+        "mimeType": { "type": "string", "maxLength": 60 },
+        "fileSize": { "type": "number" },
+        "imageDataUrl": { "type": "string", "maxLength": 950000 },
+        "uploadedAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["folio", "participantNombre", "fileName", "mimeType", "imageDataUrl", "uploadedAt"]
+    },
+    "TournamentConfig": {
+      "title": "TournamentConfig",
+      "description": "General settings and editable content of the tournament",
+      "type": "object",
+      "properties": {
+        "titulo": { "type": "string", "maxLength": 150 },
+        "edicion": { "type": "string", "maxLength": 80 },
+        "slogan": { "type": "string", "maxLength": 200 },
+        "club": { "type": "string", "maxLength": 150 },
+        "fecha": { "type": "string", "maxLength": 100 },
+        "fechaIso": { "type": "string", "maxLength": 50 },
+        "hora": { "type": "string", "maxLength": 50 },
+        "lugar": { "type": "string", "maxLength": 250 },
+        "referencia": { "type": "string", "maxLength": 250 },
+        "mapaUrl": { "type": "string", "maxLength": 500 },
+        "costo": { "type": "number" },
+        "cupoMaximo": { "type": "number" },
+        "totalInscritos": { "type": "number" },
+        "fechaLimite": { "type": "string", "maxLength": 100 },
+        "inscripcionesAbiertas": { "type": "boolean" },
+        "clabe": { "type": "string", "maxLength": 30 },
+        "banco": { "type": "string", "maxLength": 100 },
+        "titular": { "type": "string", "maxLength": 150 },
+        "whatsappContacto": { "type": "string", "maxLength": 20 },
+        "bolsaPremios": { "type": "string", "maxLength": 150 },
+        "primerLugarEfectivo": { "type": "string", "maxLength": 150 },
+        "presidente": { "type": "string", "maxLength": 120 },
+        "vicepresidente": { "type": "string", "maxLength": 120 },
+        "premiacionTexto": { "type": "string", "maxLength": 2000 },
+        "sistemaCompetenciaTexto": { "type": "string", "maxLength": 2000 },
+        "transitoriosTexto": { "type": "string", "maxLength": 2000 },
+        "indicacionesPago": { "type": "string", "maxLength": 1000 }
+      },
+      "required": ["titulo", "fecha", "costo", "cupoMaximo", "inscripcionesAbiertas"]
+    },
+    "Sponsor": {
+      "title": "Sponsor",
+      "description": "Tournament sponsor information",
+      "type": "object",
+      "properties": {
+        "nombre": { "type": "string", "maxLength": 100 },
+        "logo": { "type": "string", "maxLength": 500000 },
+        "enlace": { "type": "string", "maxLength": 500 },
+        "activo": { "type": "boolean" },
+        "orden": { "type": "number" }
+      },
+      "required": ["nombre", "logo", "activo"]
+    },
+    "AdminMember": {
+      "title": "AdminMember",
+      "description": "Authorized administrator email entry",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 120 },
+        "nombre": { "type": "string", "maxLength": 120 },
+        "rol": { "type": "string", "maxLength": 80 },
+        "agregadoEn": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["email", "nombre", "rol"]
+    }
+  },
+  "firestore": {
+    "/participantes/{participanteId}": {
+      "schema": { "$ref": "#/entities/Participant" },
+      "description": "Collection of tournament participant registrations"
+    },
+    "/comprobantes/{comprobanteId}": {
+      "schema": { "$ref": "#/entities/PaymentReceipt" },
+      "description": "Private admin-only vault storing uploaded payment receipt photos and links"
+    },
+    "/configuracion/{configId}": {
+      "schema": { "$ref": "#/entities/TournamentConfig" },
+      "description": "Collection for tournament global configurations"
+    },
+    "/patrocinadores/{patrocinadorId}": {
+      "schema": { "$ref": "#/entities/Sponsor" },
+      "description": "Collection of sponsors displayed on the landing page"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminMember" },
+      "description": "Collection of administrative users by UID"
+    },
+    "/admins_by_email/{email}": {
+      "schema": { "$ref": "#/entities/AdminMember" },
+      "description": "Collection of authorized admin emails managed from Admin Panel"
+    }
+  }
+}
