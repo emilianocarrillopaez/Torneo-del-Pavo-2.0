@@ -1,0 +1,696 @@
+================================================================================
+CIERRE DE LA PARTE 1 DE 3 — RECONOCIMIENTO, SEGURIDAD Y PRIVACIDAD
+Proyecto: Torneo del Pavo 2.0 (Club de Ajedrez Don Gonzalo, Durango, Dgo.)
+Fecha: 2026-11-20
+================================================================================
+
+1. RESUMEN EJECUTIVO
+--------------------------------------------------------------------------------
+Se cerraron las brechas críticas y altas de privacidad y control de acceso en
+código y en las reglas de Firestore (ya desplegadas hacia la base con nombre
+`ai-studio-1b982696-e484-4fe2-a9e1-54984917aae2`): los datos personales
+completos (`/participantes`) y la bóveda de comprobantes (`/comprobantes`)
+quedaron restringidos exclusivamente a administradores con correo verificado
+vía Google Sign-In, mientras el padrón público lee únicamente la colección
+sanitizada `/participantes_publicos`. Se blindaron inscripciones con lotes
+atómicos (`writeBatch`), llaves SHA-256 anti-duplicados sin enumeración,
+validación binaria (magic bytes) y de data URL en comprobantes, folios
+impredecibles, exportaciones seguras sin `xlsx` y sin inyección de fórmulas,
+Aviso de Privacidad con consentimiento obligatorio de tutor para menores de 18
+años, y limpieza de datos bancarios reales del código fuente.
+
+Riesgos que permanecen hasta completar los pasos manuales / entorno local:
+falta ejecutar la suite del emulador (`npm run test:rules`) en un equipo con
+Java JRE instalado, activar App Check con enforcement, desactivar
+Correo/Contraseña en Firebase Auth, restringir la API key por referrer HTTP y
+registrar el documento inicial del organizador en `/admins` (o
+`/admins_by_email`).
+
+
+2. TABLA DE HALLAZGOS Y ESTADO
+--------------------------------------------------------------------------------
+- H1 [CRÍTICO]
+  Archivos: firestore.rules, src/types/tournament.ts, src/utils/tournamentUtils.ts,
+            src/services/tournamentService.ts, src/components/ParticipantsPage.tsx,
+            src/components/admin/AdminParticipantsTab.tsx, src/utils/exportUtils.ts
+  Estado: Corregido (lectura pública movida a /participantes_publicos; cero PII
+          en padrón y exportaciones públicas).
+
+- H2 [CRÍTICO]
+  Archivos: firestore.rules, src/context/AuthContext.tsx,
+            src/components/admin/AdminAuthScreen.tsx,
+            src/components/admin/AdminAccessTab.tsx, src/components/AdminPanel.tsx
+  Estado: Corregido en código + pendiente de paso manual (exige email_verified == true,
+          solo Google Sign-In, cierre por inactividad de 30 min, protección del último
+          admin; falta desactivar Correo/Contraseña en consola y crear el admin
+          semilla en /admins o /admins_by_email).
+
+- H3 [ALTO]
+  Archivos: firestore.rules, src/services/tournamentService.ts, src/App.tsx
+  Estado: Corregido (Opción A) (se eliminó escritura pública en totalInscritos;
+          conteo calculado vía getCountFromServer sobre /participantes_publicos).
+
+- H4 [ALTO]
+  Archivos: firestore.rules, src/utils/receiptUtils.ts,
+            src/components/admin/ReceiptViewerModal.tsx,
+            src/components/admin/AdminParticipantsTab.tsx
+  Estado: Corregido (validación de magic bytes, prefijos base64 estrictos ligados
+          al mimeType, iframe sandbox="" con Blob URL para PDF,
+          referrerPolicy="no-referrer", y botón «Purgar comprobantes»).
+
+- H5 [ALTO]
+  Archivos: src/lib/firebase.ts, src/components/RegistrationForm.tsx,
+            firebase-applet-config.json (referenciado)
+  Estado: Corregido en código + pendiente de paso manual (inicialización
+          condicional de App Check, enfriamiento y límite de intentos en cliente;
+          falta llave recaptchaSiteKey, enforcement en Consola Firebase y alertas
+          de presupuesto en GCP).
+
+- H6 [ALTO]
+  Archivos: firestore.rules, src/types/tournament.ts, src/utils/tournamentUtils.ts,
+            src/components/admin/AdminContentTab.tsx
+  Estado: Corregido (hasOnly estricto en todas las colecciones, unificación de
+          categorías a Juvenil/Libre, validación de formato whatsapp, correo,
+          fechaNacimiento, enlace, mapaUrl, y /test/connection solo get).
+
+- H7 [ALTO]
+  Archivos: firestore.rules, src/utils/tournamentUtils.ts,
+            src/services/tournamentService.ts, src/components/RegistrationForm.tsx
+  Estado: Corregido (eliminada consulta pública de duplicados; llaves
+          deterministas SHA-256 en /registro_llaves dentro del writeBatch con
+          fallo cerrado).
+
+- H8 [ALTO]
+  Archivos: firestore.rules, src/services/tournamentService.ts,
+            src/components/admin/AdminContentTab.tsx, src/types/tournament.ts
+  Estado: Corregido (writeBatch atómico en creación, alta admin, adjunto de
+          recibo y eliminación completa; agregado fechaLimiteIso /
+          fechaLimiteTimestamp validado en reglas con request.time).
+
+- H9 [MEDIO]
+  Archivos: src/utils/tournamentUtils.ts, src/services/tournamentService.ts,
+            src/utils/tournamentUtils.test.ts
+  Estado: Corregido (generateSecureFolio() con crypto.getRandomValues, alfabeto
+          sin ambigüedades PAVO-XXXXXX y prueba unitaria).
+
+- H10 [MEDIO]
+  Archivos: package.json, bun.lock, src/utils/exportUtils.ts,
+            src/utils/tournamentUtils.ts,
+            src/components/admin/AdminParticipantsTab.tsx,
+            src/utils/tournamentUtils.test.ts
+  Estado: Corregido (xlsx@0.18.5 reemplazada por exceljs@^4.4.0, neutralización
+          de fórmulas =,+,-,@,\t,\r y banners de confidencialidad en
+          exportaciones admin).
+
+- H11 [MEDIO]
+  Archivos: src/utils/tournamentUtils.ts, src/components/SponsorsCarousel.tsx,
+            src/components/admin/AdminSponsorsTab.tsx,
+            src/components/InfoSection.tsx, src/components/Footer.tsx,
+            src/components/RegistrationSuccessModal.tsx, src/components/Hero.tsx
+  Estado: Corregido (safeHttpUrl, formatWhatsAppUrl con encodeURIComponent, y
+          rel="noopener noreferrer" en enlaces externos).
+
+- H12 [MEDIO]
+  Archivos: firebase.json, firestore.indexes.json, eslint.config.mjs,
+            .env.example, package.json
+  Estado: Corregido en código + pendiente de paso manual (configuración de
+          despliegue a la base con nombre, rewrites SPA, CSP y cabeceras de
+          seguridad, eliminación de @google/genai, express, dotenv; falta
+          restringir API key y dominios en consola).
+
+- H13 [MEDIO]
+  Archivos: src/components/PrivacyNoticeModal.tsx,
+            src/components/RegistrationForm.tsx,
+            src/components/admin/AdminParticipantsTab.tsx,
+            src/services/tournamentService.ts, firestore.rules
+  Estado: Corregido (Aviso de Privacidad borrador sujeto a revisión, casilla
+          obligatoria, consentimiento y nombre de tutor para menores de 18 años
+          al día del evento, y herramientas admin «Purgar comprobantes» y
+          «Anonimizar post-torneo»).
+
+- H14 [MEDIO]
+  Archivos: src/types/tournament.ts
+  Estado: Corregido en código + pendiente de paso manual (CLABE, titular y
+          WhatsApp reales sustituidos por valores de ejemplo en DEFAULT_CONFIG;
+          el organizador debe guardar los reales desde el Panel Admin en
+          Firestore).
+
+- H15 [MEDIO]
+  Archivos: security_spec.md, firestore.rules, firebase-blueprint.json,
+            docs/AUDITORIA.md
+  Estado: Corregido (especificación técnica, esquema blueprint y reporte de
+          auditoría alineados 1:1 con las reglas desplegadas).
+
+- H16 [MEDIO (bug)]
+  Archivos: src/App.tsx
+  Estado: Pendiente para Parte 2 (decodeURIComponent sobre el hash sin try/catch
+          ni Error Boundary).
+
+- H17 [BAJO]
+  Archivos: src/App.tsx, src/services/tournamentService.ts
+  Estado: Pendiente para Parte 2 (seedInitialDataIfEmpty ejecutándose al cargar
+          visitas públicas).
+
+- H18 [BAJO]
+  Archivos: src/utils/tournamentUtils.ts, src/types/tournament.ts,
+            src/components/RegistrationForm.tsx
+  Estado: Pendiente para Parte 2 (fecha del torneo hardcodeada en varios archivos).
+
+- H19 [BAJO]
+  Archivos: package.json, bun.lock
+  Estado: Parcial (seguridad hecha); resto pendiente para Parte 2 (dependencias
+          sin uso eliminadas y scripts test, test:rules, lint:rules agregados;
+          falta renombrar "react-example" y limpiar script clean).
+
+- H20 [BAJO]
+  Archivos: public/assets/aistudio/, index.html
+  Estado: Pendiente para Parte 3 (optimización de imágenes pesadas y og:image
+          absoluto).
+
+- H21 (Extra) [ALTO]
+  Archivos: src/lib/firebase.ts, src/services/tournamentService.ts
+  Estado: Corregido (se eliminó fuga de uid, email, providerInfo y rutas de
+          Firestore en handleFirestoreError; errores mapeados a mensajes amables
+          en español).
+
+
+3. CONTENIDO COMPLETO DE firestore.rules, firebase.json Y firestore.indexes.json
+--------------------------------------------------------------------------------
+
+--- firestore.rules ---
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Denegar todo por defecto
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\.@\\-]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Sin correos hardcodeados en reglas; exige email_verified == true en todas las ramas
+    function isAdmin() {
+      return isVerifiedUser() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (
+          request.auth.token.email is string &&
+          exists(/databases/$(database)/documents/admins_by_email/$(request.auth.token.email.lower()))
+        )
+      );
+    }
+
+    function isRegistrationOpen() {
+      return exists(/databases/$(database)/documents/configuracion/general)
+        && get(/databases/$(database)/documents/configuracion/general).data.inscripcionesAbiertas == true
+        && (
+          !('fechaLimiteTimestamp' in get(/databases/$(database)/documents/configuracion/general).data) ||
+          (
+            get(/databases/$(database)/documents/configuracion/general).data.fechaLimiteTimestamp is timestamp &&
+            request.time <= get(/databases/$(database)/documents/configuracion/general).data.fechaLimiteTimestamp
+          )
+        );
+    }
+
+    function isValidParticipant(data, isCreate) {
+      return data.keys().hasOnly([
+          'nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria',
+          'estatusPago', 'fechaRegistro', 'folio', 'esFemenil', 'esAficionado',
+          'tieneRecibo', 'reciboId', 'reciboNombreArchivo', 'notas', 'website',
+          'aceptoAviso', 'aceptoAvisoVersion', 'consentimientoTutor', 'nombreTutor',
+          'fechaConsentimiento'
+        ])
+        && data.keys().hasAll([
+          'nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria',
+          'estatusPago', 'fechaRegistro', 'folio', 'esFemenil', 'esAficionado'
+        ])
+        && data.nombre is string && data.nombre.size() >= 3 && data.nombre.size() <= 150 && data.nombre.trim() == data.nombre
+        && data.fechaNacimiento is string && data.fechaNacimiento.matches('^(19[2-9][0-9]|20[0-2][0-9])-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')
+        && data.whatsapp is string && data.whatsapp.matches('^[0-9]{10}$')
+        && data.correo is string && data.correo.size() >= 5 && data.correo.size() <= 100 && data.correo == data.correo.lower() && data.correo.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && data.categoria in ['Juvenil', 'Libre']
+        && data.estatusPago in ['pendiente', 'pagado']
+        && data.fechaRegistro is string && data.fechaRegistro.size() >= 10 && data.fechaRegistro.size() <= 60
+        && data.folio is string && (isCreate ? data.folio.matches('^PAVO-[A-HJ-NP-Z2-9]{6}$') : data.folio.matches('^PAVO-[A-Z0-9]{4,10}$'))
+        && data.esFemenil is bool
+        && data.esAficionado is bool
+        && (!isCreate || (
+          'aceptoAviso' in data && data.aceptoAviso == true &&
+          'fechaConsentimiento' in data && data.fechaConsentimiento is string && data.fechaConsentimiento.size() >= 10 && data.fechaConsentimiento.size() <= 60
+        ))
+        && (!('aceptoAviso' in data) || data.aceptoAviso is bool)
+        && (!('fechaConsentimiento' in data) || (data.fechaConsentimiento is string && data.fechaConsentimiento.size() <= 60))
+        && (!('aceptoAvisoVersion' in data) || (data.aceptoAvisoVersion is string && data.aceptoAvisoVersion.size() <= 30))
+        && (!('consentimientoTutor' in data) || data.consentimientoTutor is bool)
+        && (!('nombreTutor' in data) || (data.nombreTutor is string && data.nombreTutor.size() <= 150))
+        && (!('tieneRecibo' in data) || data.tieneRecibo is bool)
+        && (!('reciboId' in data) || (data.reciboId is string && isValidId(data.reciboId)))
+        && (!('reciboNombreArchivo' in data) || (data.reciboNombreArchivo is string && data.reciboNombreArchivo.size() <= 180))
+        && (!('notas' in data) || (data.notas is string && data.notas.size() <= 500))
+        && (!('website' in data) || data.website == '');
+    }
+
+    function hasMinorConsentIfRequired(data) {
+      return !(data.fechaNacimiento > '2008-12-19') || (
+        'consentimientoTutor' in data && data.consentimientoTutor == true &&
+        'nombreTutor' in data && data.nombreTutor is string && data.nombreTutor.trim().size() >= 3
+      );
+    }
+
+    function isValidPublicParticipant(data) {
+      return data.keys().hasOnly([
+          'folio', 'nombre', 'categoria', 'esAficionado', 'esFemenil',
+          'estatusPago', 'rangoEdad', 'edad', 'fechaRegistro'
+        ])
+        && data.keys().hasAll([
+          'folio', 'nombre', 'categoria', 'esAficionado', 'esFemenil',
+          'estatusPago', 'fechaRegistro'
+        ])
+        && data.folio is string && data.folio.matches('^PAVO-[A-Z0-9]{4,10}$')
+        && data.nombre is string && data.nombre.size() >= 3 && data.nombre.size() <= 150 && data.nombre.trim() == data.nombre
+        && data.categoria in ['Juvenil', 'Libre']
+        && data.esAficionado is bool
+        && data.esFemenil is bool
+        && data.estatusPago in ['pendiente', 'pagado']
+        && data.fechaRegistro is string && data.fechaRegistro.size() >= 10 && data.fechaRegistro.size() <= 60
+        && (!('rangoEdad' in data) || (data.rangoEdad is string && data.rangoEdad.size() <= 40))
+        && (!('edad' in data) || (data.edad is number && data.edad >= 3 && data.edad <= 110));
+    }
+
+    function isValidComprobante(data) {
+      return data.keys().hasOnly([
+          'participantId', 'folio', 'participantNombre', 'fileName',
+          'mimeType', 'fileSize', 'imageDataUrl', 'uploadedAt'
+        ])
+        && data.keys().hasAll([
+          'participantId', 'folio', 'participantNombre', 'fileName',
+          'mimeType', 'fileSize', 'imageDataUrl', 'uploadedAt'
+        ])
+        && isValidId(data.participantId)
+        && data.folio is string && data.folio.size() >= 3 && data.folio.size() <= 30
+        && data.participantNombre is string && data.participantNombre.size() >= 3 && data.participantNombre.size() <= 150
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 200 && !data.fileName.matches('.*[/\\\\].*')
+        && data.mimeType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+        && data.fileSize is number && data.fileSize >= 1 && data.fileSize <= 950000
+        && data.imageDataUrl is string && data.imageDataUrl.size() >= 30 && data.imageDataUrl.size() <= 950000
+        && (
+          (data.mimeType == 'image/jpeg' && data.imageDataUrl.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$')) ||
+          (data.mimeType == 'image/png' && data.imageDataUrl.matches('^data:image/png;base64,[A-Za-z0-9+/=]+$')) ||
+          (data.mimeType == 'image/webp' && data.imageDataUrl.matches('^data:image/webp;base64,[A-Za-z0-9+/=]+$')) ||
+          (data.mimeType == 'application/pdf' && data.imageDataUrl.matches('^data:application/pdf;base64,[A-Za-z0-9+/=]+$'))
+        )
+        && data.uploadedAt is string && data.uploadedAt.size() <= 60;
+    }
+
+    function isValidConfig(data) {
+      return data.keys().hasOnly([
+          'titulo', 'edicion', 'slogan', 'club', 'fecha', 'fechaIso', 'hora',
+          'lugar', 'referencia', 'mapaUrl', 'costo', 'cupoMaximo', 'totalInscritos',
+          'fechaLimite', 'fechaLimiteIso', 'fechaLimiteTimestamp', 'inscripcionesAbiertas',
+          'clabe', 'banco', 'titular', 'whatsappContacto', 'bolsaPremios',
+          'primerLugarEfectivo', 'presidente', 'vicepresidente', 'premiacionTexto',
+          'sistemaCompetenciaTexto', 'transitoriosTexto', 'indicacionesPago'
+        ])
+        && data.keys().hasAll(['titulo', 'fecha', 'costo', 'cupoMaximo', 'inscripcionesAbiertas'])
+        && data.titulo is string && data.titulo.size() >= 3 && data.titulo.size() <= 150
+        && data.fecha is string && data.fecha.size() >= 3 && data.fecha.size() <= 100
+        && data.costo is number && data.costo >= 0 && data.costo <= 100000
+        && data.cupoMaximo is number && data.cupoMaximo >= 1 && data.cupoMaximo <= 5000
+        && data.inscripcionesAbiertas is bool
+        && (!('totalInscritos' in data) || (data.totalInscritos is number && data.totalInscritos >= 0))
+        && (!('mapaUrl' in data) || data.mapaUrl == '' || data.mapaUrl == '#' || data.mapaUrl.matches('^https://[^\\s]+$'))
+        && (!('fechaLimiteTimestamp' in data) || data.fechaLimiteTimestamp is timestamp)
+        && (!('fechaLimiteIso' in data) || (data.fechaLimiteIso is string && data.fechaLimiteIso.size() <= 60))
+        && (!('whatsappContacto' in data) || (data.whatsappContacto is string && data.whatsappContacto.size() <= 20))
+        && (!('clabe' in data) || (data.clabe is string && data.clabe.size() <= 30));
+    }
+
+    function isValidSponsor(data) {
+      return data.keys().hasOnly(['nombre', 'logo', 'enlace', 'activo', 'orden', 'categoriaSponsor'])
+        && data.keys().hasAll(['nombre', 'logo', 'activo'])
+        && data.nombre is string && data.nombre.size() >= 1 && data.nombre.size() <= 100
+        && data.activo is bool
+        && data.logo is string && data.logo.size() <= 950000
+        && (
+          data.logo == '' ||
+          data.logo.matches('^https://[^\\s]+$') ||
+          data.logo.matches('^data:image/(jpeg|png|webp|svg\\+xml)(;base64,|;charset=UTF-8,).*$')
+        )
+        && (!('enlace' in data) || data.enlace == '' || data.enlace == '#' || data.enlace.matches('^https://[^\\s]+$'))
+        && (!('orden' in data) || data.orden is number)
+        && (!('categoriaSponsor' in data) || (data.categoriaSponsor is string && data.categoriaSponsor.size() <= 120));
+    }
+
+    function isValidAdminMember(data) {
+      return data.keys().hasOnly(['email', 'nombre', 'rol', 'agregadoEn'])
+        && data.keys().hasAll(['email', 'nombre', 'rol'])
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 120 && data.email == data.email.lower() && data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && data.nombre is string && data.nombre.size() >= 2 && data.nombre.size() <= 120
+        && data.rol is string && data.rol.size() >= 2 && data.rol.size() <= 80
+        && (!('agregadoEn' in data) || (data.agregadoEn is string && data.agregadoEn.size() <= 60));
+    }
+
+    // Colección privada de participantes (PII: correo, WhatsApp, nacimiento, reciboId, tutor)
+    match /participantes/{participanteId} {
+      allow get, list: if isAdmin();
+
+      allow create: if isValidId(participanteId)
+        && isValidParticipant(request.resource.data, true)
+        && (
+          isAdmin()
+          || (
+            isRegistrationOpen()
+            && request.resource.data.estatusPago == 'pendiente'
+            && request.resource.data.tieneRecibo == true
+            && 'reciboId' in request.resource.data
+            && existsAfter(/databases/$(database)/documents/comprobantes/$(request.resource.data.reciboId))
+            && existsAfter(/databases/$(database)/documents/participantes_publicos/$(participanteId))
+            && (!('notas' in request.resource.data) || request.resource.data.notas == '')
+            && hasMinorConsentIfRequired(request.resource.data)
+          )
+        );
+
+      allow update: if isAdmin()
+        && isValidId(participanteId)
+        && isValidParticipant(request.resource.data, false);
+
+      allow delete: if isAdmin() && isValidId(participanteId);
+    }
+
+    // Colección pública sanitizada para el padrón (cero datos de contacto, nacimiento, tutor ni recibos)
+    match /participantes_publicos/{participanteId} {
+      allow read: if true;
+
+      allow create: if isValidId(participanteId)
+        && isValidPublicParticipant(request.resource.data)
+        && existsAfter(/databases/$(database)/documents/participantes/$(participanteId))
+        && (
+          isAdmin()
+          || (
+            request.resource.data.estatusPago == 'pendiente'
+            && request.resource.data.folio == getAfter(/databases/$(database)/documents/participantes/$(participanteId)).data.folio
+            && request.resource.data.categoria == getAfter(/databases/$(database)/documents/participantes/$(participanteId)).data.categoria
+            && request.resource.data.esAficionado == getAfter(/databases/$(database)/documents/participantes/$(participanteId)).data.esAficionado
+            && request.resource.data.esFemenil == getAfter(/databases/$(database)/documents/participantes/$(participanteId)).data.esFemenil
+            && request.resource.data.estatusPago == getAfter(/databases/$(database)/documents/participantes/$(participanteId)).data.estatusPago
+          )
+        );
+
+      allow update: if isAdmin()
+        && isValidId(participanteId)
+        && isValidPublicParticipant(request.resource.data);
+
+      allow delete: if isAdmin() && isValidId(participanteId);
+    }
+
+    // Llaves deterministas SHA-256 para evitar duplicados sin permitir enumeración
+    match /registro_llaves/{hashId} {
+      allow get, list, update: if false;
+
+      allow create: if hashId is string
+        && hashId.matches('^[a-f0-9]{64}$')
+        && request.resource.data.keys().hasOnly(['tipo', 'participantId', 'createdAt'])
+        && request.resource.data.keys().hasAll(['tipo', 'participantId', 'createdAt'])
+        && request.resource.data.tipo in ['email', 'whatsapp']
+        && isValidId(request.resource.data.participantId)
+        && request.resource.data.createdAt is string && request.resource.data.createdAt.size() <= 60
+        && existsAfter(/databases/$(database)/documents/participantes/$(request.resource.data.participantId));
+
+      allow delete: if isAdmin() && hashId is string && hashId.matches('^[a-f0-9]{64}$');
+    }
+
+    // Bóveda privada de comprobantes (solo admin lee, actualiza o borra)
+    match /comprobantes/{comprobanteId} {
+      allow read: if isAdmin();
+
+      allow create: if isValidId(comprobanteId)
+        && isValidComprobante(request.resource.data)
+        && (
+          isAdmin()
+          || (
+            isRegistrationOpen()
+            && existsAfter(/databases/$(database)/documents/participantes/$(request.resource.data.participantId))
+          )
+        );
+
+      allow update: if isAdmin()
+        && isValidId(comprobanteId)
+        && isValidComprobante(request.resource.data);
+
+      allow delete: if isAdmin() && isValidId(comprobanteId);
+    }
+
+    // Configuración del torneo (Opción A: sin escritura pública a totalInscritos)
+    match /configuracion/{configId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(configId) && isValidConfig(request.resource.data);
+      allow delete: if isAdmin() && isValidId(configId);
+    }
+
+    // Patrocinadores
+    match /patrocinadores/{patrocinadorId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(patrocinadorId) && isValidSponsor(request.resource.data);
+      allow delete: if isAdmin() && isValidId(patrocinadorId);
+    }
+
+    // Administradores por UID y por correo normalizado
+    match /admins/{adminId} {
+      allow get: if isVerifiedUser() && (request.auth.uid == adminId || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(adminId) && isValidAdminMember(request.resource.data);
+      allow delete: if isAdmin() && isValidId(adminId);
+    }
+
+    match /admins_by_email/{emailId} {
+      allow get: if isVerifiedUser() && (
+        (request.auth.token.email is string && request.auth.token.email.lower() == emailId) ||
+        isAdmin()
+      );
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && isValidId(emailId)
+        && emailId == emailId.lower()
+        && isValidAdminMember(request.resource.data)
+        && request.resource.data.email == emailId;
+      allow delete: if isAdmin() && isValidId(emailId);
+    }
+
+    // Documento único de comprobación de conectividad
+    match /test/{docId} {
+      allow get: if docId == 'connection';
+      allow list, write: if false;
+    }
+  }
+}
+
+--- firebase.json ---
+{
+  "firestore": {
+    "database": "ai-studio-1b982696-e484-4fe2-a9e1-54984917aae2",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "Content-Security-Policy",
+            "value": "default-src 'self'; script-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebaseappcheck.googleapis.com https://content-firebaseappcheck.googleapis.com https://www.google.com; frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "X-Frame-Options",
+            "value": "DENY"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          },
+          {
+            "key": "Permissions-Policy",
+            "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+          },
+          {
+            "key": "Strict-Transport-Security",
+            "value": "max-age=31536000; includeSubDomains; preload"
+          }
+        ]
+      }
+    ]
+  }
+}
+
+--- firestore.indexes.json ---
+{
+  "indexes": [],
+  "fieldOverrides": []
+}
+
+
+4. PASOS MANUALES (FIREBASE CONSOLE Y GOOGLE CLOUD CONSOLE)
+--------------------------------------------------------------------------------
+1. Dar de alta al primer administrador (bootstrap inicial en Firestore):
+   - Entra a https://console.firebase.google.com/ y selecciona el proyecto
+     `yogic-decoder-5lxdt`.
+   - Ve a Build -> Firestore Database, abre el selector de base de datos arriba
+     y elige `ai-studio-1b982696-e484-4fe2-a9e1-54984917aae2` (no uses `(default)`).
+   - Crea la colección `admins_by_email` con un documento cuyo ID sea exactamente
+     tu correo en minúsculas (`emilianocarrillopaez@gmail.com`) y estos 4 campos:
+       * email (string): emilianocarrillopaez@gmail.com
+       * nombre (string): tu nombre
+       * rol (string): Director / Organizador
+       * agregadoEn (string): fecha ISO actual (ej. 2026-11-20T00:00:00.000Z)
+   - Con esto ya podrás entrar con Google Sign-In al panel y gestionar al resto
+     del comité desde la pestaña Accesos Admin (o crear también el doc en
+     `admins/{tu_uid}`).
+
+2. Desactivar acceso por Correo/Contraseña en Firebase Authentication:
+   - En Firebase Console -> Build -> Authentication -> Sign-in method.
+   - Deja habilitado únicamente Google y desactiva (o elimina) Correo
+     electrónico/Contraseña.
+
+3. Limpiar dominios autorizados en Firebase Authentication:
+   - En Authentication -> Settings -> Authorized domains, conserva únicamente
+     los dominios donde realmente opera la página
+     (`ais-dev-fyesc7g3ca4tkfyj4phfj6-89433149246.us-west2.run.app`,
+     `ais-pre-fyesc7g3ca4tkfyj4phfj6-89433149246.us-west2.run.app` durante
+     pruebas y tu dominio propio final). Retira dominios innecesarios.
+
+4. Cargar datos reales bancarios y de WhatsApp desde el Panel Admin y
+   sincronizar el padrón público:
+   - Inicia sesión en `#admin` -> pestaña Contenido, captura la CLABE
+     interbancaria real, Banco, Titular y WhatsApp de contacto, además de la
+     Fecha límite, y guarda cambios (esto guarda también el límite legible por
+     reglas).
+   - Si ya había inscritos previos antes de esta actualización, abre la pestaña
+     Participantes y presiona el botón «Sincronizar padrón público» una vez para
+     poblar `/participantes_publicos`.
+
+5. Activar Firebase App Check (anti-bots y anti-spam):
+   - En Google Cloud Console / reCAPTCHA Admin, crea una clave de reCAPTCHA v3
+     para tus dominios (`ais-dev-*`, `ais-pre-*` y tu dominio final).
+   - En Firebase Console -> Build -> App Check -> Apps, registra la app web con
+     esa clave v3, copia la Site Key en el campo `recaptchaSiteKey` de
+     `firebase-applet-config.json` y activa el Enforcement tanto para Cloud
+     Firestore como para Authentication.
+
+6. Restringir la API Key por dominio (HTTP referrer) en Google Cloud Console:
+   - Entra a https://console.cloud.google.com/ -> APIs y servicios ->
+     Credenciales, abre la clave web usada por Firebase.
+   - En Restricciones de aplicación, selecciona Sitios web (referrers HTTP) y
+     agrega solo tus URLs permitidas:
+       * https://ais-dev-fyesc7g3ca4tkfyj4phfj6-89433149246.us-west2.run.app/*
+       * https://ais-pre-fyesc7g3ca4tkfyj4phfj6-89433149246.us-west2.run.app/*
+       * https://TU-DOMINIO-FINAL/*
+
+7. Revisar permisos IAM, activar respaldos y alertas de presupuesto:
+   - En Google Cloud Console -> IAM y administración -> IAM, confirma que solo
+     personas de confianza tengan rol Propietario/Editor.
+   - En Facturación -> Presupuestos y alertas, crea una alerta mensual baja
+     (ej. $50 MXN / $5 USD) para detectar picos anómalos de uso.
+   - En Firestore -> Backups / Import/Export, configura exportaciones
+     programadas (si habilitas plan Blaze) o realiza respaldos manuales
+     periódicos desde Panel Admin -> Participantes (Excel/PDF).
+
+8. Revisar visibilidad del repositorio (si aplica):
+   - Si subiste este código a un repositorio público de GitHub y hubo un commit
+     anterior con la CLABE/WhatsApp reales, vuelve el repositorio privado y
+     limpia el historial antes de compartir el código.
+
+
+5. RESULTADOS REALES DE VERIFICACIÓN Y AUDITORÍA
+--------------------------------------------------------------------------------
+- npm run lint (tsc --noEmit): APROBADO (0 errores de compilación TypeScript).
+- npm run lint:rules (eslint firestore.rules): APROBADO (0 errors, 3 warnings
+  esperados de @firebase/security-rules/no-open-reads únicamente en las 3
+  colecciones públicas por diseño: /participantes_publicos, /configuracion,
+  /patrocinadores).
+- npm run build (vite build / compile_applet): APROBADO (compilado sin errores).
+- npm test (tsx --test src/utils/tournamentUtils.test.ts): APROBADO — 12/12
+  pruebas unitarias aprobadas.
+- npm run test:rules (emulador Firestore con @firebase/rules-unit-testing):
+  NO EJECUTABLE EN ESTE CONTENEDOR por falta de Java JRE ("Error: Could not
+  spawn java -version. Please make sure Java is installed and on your system
+  PATH."). La suite completa de 20 vectores quedó escrita en
+  `tests/rules/firestore.rules.test.ts` lista para ejecutarse con Java 17+.
+- bun audit (sobre bun.lock):
+  Se eliminaron 2 vulnerabilidades High al reemplazar xlsx@0.18.5 por
+  exceljs@^4.4.0.
+  Reporte actual: 3 vulnerabilidades transitivas (0 en dependencias directas):
+    * @grpc/grpc-js@1.9.16 (transitiva dentro de firebase): 1 High
+      (GHSA-m9gg-hp2v-232j), 1 Low (GHSA-f596-whhp-79r4).
+    * uuid@8.3.2 (transitiva dentro de exceljs): 1 Moderate
+      (GHSA-w5hq-g745-h8pq).
+- Verificación en navegador real (Chromium vía Playwright en http://localhost:3000):
+  0 errores y 0 advertencias en consola al recorrer formulario de registro,
+  modal de Aviso de Privacidad, campos dinámicos de tutor al ingresar fecha de
+  nacimiento de menor (2012-05-10), padrón público sanitizado sin columnas de
+  contacto y acceso Admin únicamente con Google Sign-In.
+
+
+6. LO PENDIENTE Y PRIORIDAD SUGERIDA
+--------------------------------------------------------------------------------
+1. [Prioridad Alta] Ejecutar `npm run test:rules` en una computadora con Java
+   JDK 17+ y firebase-tools para validar en vivo los 20 casos del emulador
+   contra `firestore.rules`.
+2. [Prioridad Alta] Completar los pasos manuales de la Sección 4 (documento
+   semilla de administrador en admins_by_email, desactivar Correo/Contraseña,
+   cargar CLABE/WhatsApp reales en el Panel Admin y configurar App Check +
+   restricción de API key).
+3. [Pendiente — Parte 2] Atender H16 (decodeURIComponent en hash sin try/catch ni
+   Error Boundary), H17 (seedInitialDataIfEmpty en carga pública), H18
+   (desacoplar fechas hardcodeadas de 2026-12-19) y la limpieza restante
+   no-seguridad de H19 (nombre de paquete y script clean).
+4. [Pendiente — Parte 3] Atender H20 (optimización de peso de imágenes y ruta
+   absoluta en og:image).
+
+
+7. DECISIONES QUE DEBE TOMAR EL ORGANIZADOR
+--------------------------------------------------------------------------------
+1. ¿Nombre completo o inicial de apellido en el padrón público?
+   Actualmente está activado `MASK_PUBLIC_LAST_NAMES = true` (muestra por
+   ejemplo "Emiliano C.") para proteger mejor la privacidad, especialmente de
+   menores; si el club prefiere mostrar nombres completos en el padrón público,
+   se cambia a `false` en una sola constante.
+
+2. ¿Control de cupo flexible (Opción A) o estricto por reglas (Opción B)?
+   Quedó implementada la Opción A (conteo automático en vivo con
+   getCountFromServer sin escritura pública en configuración), ya que protege el
+   documento de configuración contra manipulación; confirma si el club prefiere
+   mantener así el cierre manual/por validación de pago o si en el futuro se
+   migra a Opción B estricta (o Cloud Function con plan Blaze).
+
+3. Tiempo de retención y purga de datos/comprobantes post-torneo:
+   Define cuántos días después del 19 de diciembre de 2026 (por ejemplo, 15 o
+   30 días tras cerrar premiación y aclaraciones) usarás los botones del Panel
+   Admin («Purgar comprobantes» y «Anonimizar post-torneo») y ajusta si deseas
+   ese plazo en el texto definitivo del Aviso de Privacidad (actualmente marcado
+   como borrador sujeto a revisión).

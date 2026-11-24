@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Clock, Calendar, Sparkles } from 'lucide-react';
 import { computeCountdown, CountdownState } from '../utils/tournamentUtils';
@@ -13,9 +13,10 @@ interface TimeTileProps {
   value: number;
   label: string;
   highlight?: boolean;
+  reduceMotion?: boolean;
 }
 
-const TimeTile: React.FC<TimeTileProps> = ({ value, label, highlight }) => {
+const TimeTile: React.FC<TimeTileProps> = ({ value, label, highlight, reduceMotion }) => {
   const formatted = String(value).padStart(2, '0');
 
   return (
@@ -27,20 +28,30 @@ const TimeTile: React.FC<TimeTileProps> = ({ value, label, highlight }) => {
       }`}
     >
       <div className="relative h-11 sm:h-14 flex items-center justify-center overflow-hidden">
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.span
-            key={formatted}
-            initial={{ y: -14, opacity: 0, scale: 0.92 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 14, opacity: 0, scale: 0.92 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
+        {reduceMotion ? (
+          <span
             className={`font-festive text-2xl sm:text-4xl md:text-5xl font-black tabular-nums leading-none ${
               highlight ? 'text-yellow-300' : 'text-white'
             }`}
           >
             {formatted}
-          </motion.span>
-        </AnimatePresence>
+          </span>
+        ) : (
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={formatted}
+              initial={{ y: -14, opacity: 0, scale: 0.92 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 14, opacity: 0, scale: 0.92 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className={`font-festive text-2xl sm:text-4xl md:text-5xl font-black tabular-nums leading-none ${
+                highlight ? 'text-yellow-300' : 'text-white'
+              }`}
+            >
+              {formatted}
+            </motion.span>
+          </AnimatePresence>
+        )}
       </div>
       <span className="block mt-1 text-[9px] sm:text-xs font-bold uppercase tracking-wide sm:tracking-widest text-emerald-300 truncate">
         {label}
@@ -54,16 +65,39 @@ export const EventCountdown: React.FC<EventCountdownProps> = ({
   fechaLabel = 'Sábado 19 de diciembre de 2026',
   horaLabel = '16:30 hrs',
 }) => {
+  const reduceMotion = useMemo(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }, []);
+
   const [countdown, setCountdown] = useState<CountdownState>(() =>
     computeCountdown(targetIso)
   );
 
   useEffect(() => {
-    setCountdown(computeCountdown(targetIso));
-    const timer = setInterval(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const startOrStop = () => {
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
       setCountdown(computeCountdown(targetIso));
-    }, 1000);
-    return () => clearInterval(timer);
+      timer = setInterval(() => {
+        setCountdown(computeCountdown(targetIso));
+      }, 1000);
+    };
+
+    startOrStop();
+    document.addEventListener('visibilitychange', startOrStop);
+
+    return () => {
+      if (timer !== null) clearInterval(timer);
+      document.removeEventListener('visibilitychange', startOrStop);
+    };
   }, [targetIso]);
 
   return (
@@ -99,11 +133,15 @@ export const EventCountdown: React.FC<EventCountdownProps> = ({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-2.5 sm:gap-4" aria-live="polite" aria-label="Tiempo restante para el evento">
-          <TimeTile value={countdown.days} label="Días" highlight />
-          <TimeTile value={countdown.hours} label="Horas" />
-          <TimeTile value={countdown.minutes} label="Minutos" />
-          <TimeTile value={countdown.seconds} label="Segundos" highlight />
+        <div
+          className="grid grid-cols-4 gap-2.5 sm:gap-4"
+          aria-live="off"
+          aria-label={`Faltan ${countdown.days} días, ${countdown.hours} horas y ${countdown.minutes} minutos para el evento`}
+        >
+          <TimeTile value={countdown.days} label="Días" highlight reduceMotion={reduceMotion} />
+          <TimeTile value={countdown.hours} label="Horas" reduceMotion={reduceMotion} />
+          <TimeTile value={countdown.minutes} label="Minutos" reduceMotion={reduceMotion} />
+          <TimeTile value={countdown.seconds} label="Segundos" highlight reduceMotion={reduceMotion} />
         </div>
       )}
     </div>

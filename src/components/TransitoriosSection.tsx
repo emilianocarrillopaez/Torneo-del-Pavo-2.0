@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Camera, Clock, AlertCircle, Award } from 'lucide-react';
+import { FileText, Camera, Clock, AlertCircle } from 'lucide-react';
 import { TournamentConfig } from '../types/tournament';
 
 interface TransitoriosProps {

@@ -1,32 +1,53 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
-import { Participant, TournamentConfig } from '../types/tournament';
+import { Participant, PublicParticipant, TournamentConfig, WaitlistEntry } from '../types/tournament';
 import {
   buildParticipantExportRows,
+  buildPublicExportRows,
+  buildSwissPairingRows,
   buildTournamentExportSummary,
+  sanitizeSpreadsheetCell,
 } from './tournamentUtils';
 
-interface ExportOptions {
+interface AdminExportOptions {
   participants: Participant[];
   config: TournamentConfig;
-  isAdminExport: boolean;
+  isAdminExport: true;
+}
+
+interface PublicExportOptions {
+  participants: PublicParticipant[];
+  config: TournamentConfig;
+  isAdminExport: false;
+}
+
+type ExportOptions = AdminExportOptions | PublicExportOptions;
+
+const CONFIDENTIAL_NOTICE =
+  'CONFIDENCIAL: CONTIENE DATOS PERSONALES — USO EXCLUSIVO DEL COMITÉ ORGANIZADOR';
+
+function triggerBlobDownload(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /**
- * Generates and downloads a formatted multi-page PDF roster using jsPDF + autoTable.
+ * Generates and downloads a formatted multi-page PDF roster using lazy-loaded jsPDF + autoTable.
+ * Public exports strictly exclude all contact, birthdate, and receipt details.
  */
-export function exportParticipantsToPDF({
-  participants,
-  config,
-  isAdminExport,
-}: ExportOptions): void {
+export async function exportParticipantsToPDF(options: ExportOptions): Promise<void> {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
+
+  const { participants, config, isAdminExport } = options;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const rows = buildParticipantExportRows(participants, {
-    includeAdminReceiptLinks: isAdminExport,
-    origin,
-  });
   const summary = buildTournamentExportSummary(participants, config);
   const nowStr = new Date().toLocaleString('es-MX', {
     dateStyle: 'medium',
@@ -34,35 +55,35 @@ export function exportParticipantsToPDF({
   });
 
   // Header Banner
-  doc.setFillColor(11, 51, 32); // Emerald 950
-  doc.rect(0, 0, 297, 30, 'F');
-  doc.setFillColor(250, 204, 21); // Amber 400 accent line
-  doc.rect(0, 30, 297, 2, 'F');
+  doc.setFillColor(11, 51, 32);
+  doc.rect(0, 0, 297, 32, 'F');
+  doc.setFillColor(250, 204, 21);
+  doc.rect(0, 32, 297, 2, 'F');
 
   doc.setTextColor(253, 224, 71);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
-  doc.text(`${(config.titulo || 'TORNEO DEL PAVO 2.0').toUpperCase()}`, 14, 13);
+  doc.text(`${(config.titulo || 'TORNEO DEL PAVO 2.0').toUpperCase()}`, 14, 12);
 
   doc.setTextColor(220, 252, 231);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.text(
-    `${config.club} · ${config.fecha} · ${config.hora} · ${config.lugar}`,
-    14,
-    20
-  );
-  doc.setFontSize(8.5);
-  doc.text(
-    `${isAdminExport ? 'REPORTE ADMINISTRATIVO CONFIDENCIAL (CON COMPROBANTES)' : 'PADRÓN OFICIAL PÚBLICO DE INSCRITOS'} · Generado: ${nowStr}`,
-    14,
-    26
-  );
+  doc.setFontSize(9.5);
+  doc.text(`${config.club} · ${config.fecha} · ${config.hora} · ${config.lugar}`, 14, 19);
+
+  if (isAdminExport) {
+    doc.setTextColor(252, 165, 165);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.text(`${CONFIDENTIAL_NOTICE} · Generado: ${nowStr}`, 14, 26);
+  } else {
+    doc.setFontSize(8.5);
+    doc.text(`PADRÓN OFICIAL PÚBLICO DE INSCRITOS · Generado: ${nowStr}`, 14, 26);
+  }
 
   // KPI Summary Strip
   doc.setFillColor(240, 253, 244);
   doc.setDrawColor(167, 243, 208);
-  doc.roundedRect(14, 36, 269, 14, 2, 2, 'FD');
+  doc.roundedRect(14, 37, 269, 13, 2, 2, 'FD');
 
   doc.setTextColor(6, 78, 59);
   doc.setFont('helvetica', 'bold');
@@ -70,9 +91,8 @@ export function exportParticipantsToPDF({
   const kpiLine = isAdminExport
     ? `Inscritos: ${summary.totalInscritos}/${summary.cupoMaximo}   |   Pagados: ${summary.totalPagados}   |   Pendientes: ${summary.totalPendientes}   |   Con Recibo: ${summary.totalConRecibo}   |   Juvenil: ${summary.totalJuvenil}   |   Libre: ${summary.totalLibre}   |   Recaudado: $${summary.recaudacionConfirmada.toLocaleString('es-MX')} MXN`
     : `Total Inscritos: ${summary.totalInscritos}/${summary.cupoMaximo}   |   Confirmados: ${summary.totalPagados}   |   Pendientes: ${summary.totalPendientes}   |   Juvenil: ${summary.totalJuvenil}   |   Libre: ${summary.totalLibre}   |   Aficionados: ${summary.totalAficionados}   |   Femenil: ${summary.totalFemenil}`;
-  doc.text(kpiLine, 18, 44.5);
+  doc.text(kpiLine, 18, 45);
 
-  // Table Columns & Body
   const head = isAdminExport
     ? [
         [
@@ -85,56 +105,61 @@ export function exportParticipantsToPDF({
           'WhatsApp',
           'Correo',
           'Pago',
-          'Recibo / Link Admin',
+          'Recibo (Estado / Link Admin)',
         ],
       ]
     : [
         [
           '#',
           'Folio',
-          'Nombre Completo',
+          'Participante',
           'Categoría',
-          'Edad',
+          'Edad / Rango',
           'Distinciones',
           'Estatus Pago',
           'Fecha Registro',
         ],
       ];
 
-  const body = rows.map((r, index) => {
-    const distinctions = [
-      r.aficionado === 'Sí' ? 'Aficionado' : '',
-      r.femenil === 'Sí' ? 'Femenil' : '',
-    ]
-      .filter(Boolean)
-      .join(', ') || '-';
-
-    if (isAdminExport) {
-      return [
-        String(index + 1),
-        r.folio,
-        r.nombre,
-        r.categoria,
-        r.edad,
-        distinctions,
-        r.whatsapp,
-        r.correo,
-        r.estatusPago,
-        r.reciboEstado === 'Adjunto' ? `Adjunto (${r.reciboLink})` : 'Sin recibo',
-      ];
-    }
-
-    return [
-      String(index + 1),
-      r.folio,
-      r.nombre,
-      r.categoria,
-      r.edad,
-      distinctions,
-      r.estatusPago,
-      r.fechaRegistro,
-    ];
-  });
+  const body = isAdminExport
+    ? buildParticipantExportRows(options.participants, {
+        includeAdminReceiptLinks: true,
+        origin,
+        eventFechaIso: config.fechaIso,
+      }).map((r, index) => {
+        const distinctions =
+          [r.aficionado === 'Sí' ? 'Aficionado' : '', r.femenil === 'Sí' ? 'Femenil' : '']
+            .filter(Boolean)
+            .join(', ') || '-';
+        return [
+          String(index + 1),
+          r.folio,
+          r.nombre,
+          r.categoria,
+          r.edad,
+          distinctions,
+          r.whatsapp,
+          r.correo,
+          r.estatusPago,
+          r.reciboEstado === 'Adjunto' ? `Adjunto (${r.reciboLink})` : 'Sin recibo',
+        ];
+      })
+    : buildPublicExportRows(options.participants).map((r, index) => {
+        const distinctions =
+          [r.aficionado === 'Sí' ? 'Aficionado' : '', r.femenil === 'Sí' ? 'Femenil' : '']
+            .filter(Boolean)
+            .join(', ') || '-';
+        return [
+          String(index + 1),
+          r.folio,
+          r.nombre,
+          r.categoria,
+          r.edad,
+          distinctions,
+          r.estatusPago,
+          r.fechaRegistro,
+        ];
+      });
 
   autoTable(doc, {
     startY: 54,
@@ -173,10 +198,10 @@ export function exportParticipantsToPDF({
           1: { cellWidth: 28, fontStyle: 'bold' },
           2: { cellWidth: 74 },
           3: { cellWidth: 30 },
-          4: { cellWidth: 20 },
-          5: { cellWidth: 36 },
+          4: { cellWidth: 24 },
+          5: { cellWidth: 34 },
           6: { cellWidth: 28 },
-          7: { cellWidth: 43 },
+          7: { cellWidth: 41 },
         },
     didDrawPage: (data) => {
       const pageCount = doc.getNumberOfPages();
@@ -199,165 +224,211 @@ export function exportParticipantsToPDF({
 }
 
 /**
- * Generates and downloads a real multi-sheet Excel (.xlsx) workbook using SheetJS.
+ * Generates and downloads a multi-sheet Excel (.xlsx) workbook using lazy-loaded ExcelJS
+ * with cell formula-injection sanitization and confidentiality banners.
  */
-export function exportParticipantsToExcel({
-  participants,
-  config,
-  isAdminExport,
-}: ExportOptions): void {
+export async function exportParticipantsToExcel(options: ExportOptions): Promise<void> {
+  const { participants, config, isAdminExport } = options;
+  const ExcelJS = (await import('exceljs')).default;
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = config.club || 'Club de Ajedrez Don Gonzalo';
+  workbook.created = new Date();
+
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const rows = buildParticipantExportRows(participants, {
-    includeAdminReceiptLinks: isAdminExport,
-    origin,
-  });
   const summary = buildTournamentExportSummary(participants, config);
 
-  const toSheetObject = (r: (typeof rows)[number], idx: number) => {
-    const base: Record<string, string | number> = {
-      '#': idx + 1,
-      Folio: r.folio,
-      'Nombre Completo': r.nombre,
-      Categoría: r.categoria,
-      Edad: r.edad,
-      'Fecha Nacimiento': r.fechaNacimiento,
-      'Postulado Mejor Aficionado': r.aficionado,
-      'Postulada Mejor Femenil': r.femenil,
-      'Estatus Pago': r.estatusPago,
-      'Fecha Registro': r.fechaRegistro,
+  const columnsAdmin = [
+    { header: '#', key: 'num', width: 6 },
+    { header: 'Folio', key: 'folio', width: 16 },
+    { header: 'Nombre Completo', key: 'nombre', width: 32 },
+    { header: 'Categoría', key: 'categoria', width: 14 },
+    { header: 'Edad', key: 'edad', width: 11 },
+    { header: 'Fecha Nacimiento', key: 'fechaNacimiento', width: 16 },
+    { header: 'Mejor Aficionado', key: 'aficionado', width: 16 },
+    { header: 'Mejor Femenil', key: 'femenil', width: 15 },
+    { header: 'WhatsApp', key: 'whatsapp', width: 15 },
+    { header: 'Correo Electrónico', key: 'correo', width: 28 },
+    { header: 'Estatus Pago', key: 'estatusPago', width: 14 },
+    { header: 'Check-in', key: 'asistencia', width: 12 },
+    { header: 'Recibo Subido', key: 'reciboEstado', width: 14 },
+    { header: 'Link Recibo (Solo Admin)', key: 'reciboLink', width: 52 },
+    { header: 'Fecha Registro', key: 'fechaRegistro', width: 20 },
+  ];
+
+  const columnsPublic = [
+    { header: '#', key: 'num', width: 6 },
+    { header: 'Folio', key: 'folio', width: 16 },
+    { header: 'Participante', key: 'nombre', width: 32 },
+    { header: 'Categoría', key: 'categoria', width: 14 },
+    { header: 'Edad / Rango', key: 'edad', width: 16 },
+    { header: 'Postulado Mejor Aficionado', key: 'aficionado', width: 24 },
+    { header: 'Postulada Mejor Femenil', key: 'femenil', width: 22 },
+    { header: 'Estatus Pago', key: 'estatusPago', width: 14 },
+    { header: 'Fecha Registro', key: 'fechaRegistro', width: 20 },
+  ];
+
+  const preparedRows = isAdminExport
+    ? buildParticipantExportRows(options.participants, {
+        includeAdminReceiptLinks: true,
+        origin,
+        eventFechaIso: config.fechaIso,
+      })
+    : buildPublicExportRows(options.participants);
+
+  const addParticipantSheet = (sheetName: string, rowsSubset: typeof preparedRows) => {
+    const ws = workbook.addWorksheet(sheetName);
+    const cols = isAdminExport ? columnsAdmin : columnsPublic;
+
+    const bannerText = isAdminExport
+      ? `${CONFIDENTIAL_NOTICE} · ${config.titulo}`
+      : `PADRÓN OFICIAL PÚBLICO · ${config.titulo} (${config.club})`;
+    ws.addRow([sanitizeSpreadsheetCell(bannerText)]);
+    ws.mergeCells(1, 1, 1, cols.length);
+    const bannerCell = ws.getCell(1, 1);
+    bannerCell.font = {
+      bold: true,
+      size: 11,
+      color: { argb: isAdminExport ? 'FF991B1B' : 'FF064E3B' },
+    };
+    bannerCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: isAdminExport ? 'FFFEE2E2' : 'FFD1FAE5' },
     };
 
-    if (isAdminExport) {
-      return {
-        '#': idx + 1,
-        Folio: r.folio,
-        'Nombre Completo': r.nombre,
-        Categoría: r.categoria,
-        Edad: r.edad,
-        'Fecha Nacimiento': r.fechaNacimiento,
-        'Mejor Aficionado': r.aficionado,
-        'Mejor Femenil': r.femenil,
-        WhatsApp: r.whatsapp,
-        'Correo Electrónico': r.correo,
-        'Estatus Pago': r.estatusPago,
-        'Recibo Subido': r.reciboEstado,
-        'Link Recibo (Solo Admin)': r.reciboLink || 'Sin comprobante',
-        'Fecha Registro': r.fechaRegistro,
+    const headerRow = ws.addRow(cols.map((c) => c.header));
+    headerRow.font = { bold: true, color: { argb: 'FFFEF08A' } };
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF064E3B' },
       };
+    });
+
+    cols.forEach((col, i) => {
+      ws.getColumn(i + 1).width = col.width;
+    });
+
+    if (rowsSubset.length === 0) {
+      ws.addRow(['Sin registros en esta categoría']);
+      return;
     }
 
-    return base;
+    rowsSubset.forEach((r, idx) => {
+      if (isAdminExport) {
+        const adminRow = r as ReturnType<typeof buildParticipantExportRows>[number];
+        ws.addRow([
+          idx + 1,
+          sanitizeSpreadsheetCell(adminRow.folio),
+          sanitizeSpreadsheetCell(adminRow.nombre),
+          sanitizeSpreadsheetCell(adminRow.categoria),
+          sanitizeSpreadsheetCell(adminRow.edad),
+          sanitizeSpreadsheetCell(adminRow.fechaNacimiento),
+          sanitizeSpreadsheetCell(adminRow.aficionado),
+          sanitizeSpreadsheetCell(adminRow.femenil),
+          sanitizeSpreadsheetCell(adminRow.whatsapp),
+          sanitizeSpreadsheetCell(adminRow.correo),
+          sanitizeSpreadsheetCell(adminRow.estatusPago),
+          sanitizeSpreadsheetCell(adminRow.asistencia),
+          sanitizeSpreadsheetCell(adminRow.reciboEstado),
+          sanitizeSpreadsheetCell(adminRow.reciboLink || 'Sin comprobante'),
+          sanitizeSpreadsheetCell(adminRow.fechaRegistro),
+        ]);
+      } else {
+        const pubRow = r as ReturnType<typeof buildPublicExportRows>[number];
+        ws.addRow([
+          idx + 1,
+          sanitizeSpreadsheetCell(pubRow.folio),
+          sanitizeSpreadsheetCell(pubRow.nombre),
+          sanitizeSpreadsheetCell(pubRow.categoria),
+          sanitizeSpreadsheetCell(pubRow.edad),
+          sanitizeSpreadsheetCell(pubRow.aficionado),
+          sanitizeSpreadsheetCell(pubRow.femenil),
+          sanitizeSpreadsheetCell(pubRow.estatusPago),
+          sanitizeSpreadsheetCell(pubRow.fechaRegistro),
+        ]);
+      }
+    });
   };
 
-  const wb = XLSX.utils.book_new();
-
-  // Sheet 1: All participants
-  const allData = rows.map(toSheetObject);
-  const wsAll = XLSX.utils.json_to_sheet(allData.length > 0 ? allData : [{ Aviso: 'Sin registros aún' }]);
-  wsAll['!cols'] = isAdminExport
-    ? [
-        { wch: 5 },
-        { wch: 14 },
-        { wch: 32 },
-        { wch: 14 },
-        { wch: 10 },
-        { wch: 15 },
-        { wch: 16 },
-        { wch: 14 },
-        { wch: 15 },
-        { wch: 28 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 52 },
-        { wch: 20 },
-      ]
-    : [
-        { wch: 5 },
-        { wch: 14 },
-        { wch: 34 },
-        { wch: 15 },
-        { wch: 10 },
-        { wch: 16 },
-        { wch: 22 },
-        { wch: 20 },
-        { wch: 14 },
-        { wch: 20 },
-      ];
-  XLSX.utils.book_append_sheet(wb, wsAll, 'Todos los Inscritos');
-
-  // Sheet 2: Juvenil
-  const juvenilRows = rows.filter((r) => r.categoria === 'Juvenil' || r.categoria === 'Niños');
-  const wsJuvenil = XLSX.utils.json_to_sheet(
-    juvenilRows.length > 0 ? juvenilRows.map(toSheetObject) : [{ Aviso: 'Sin registros en Juvenil' }]
+  addParticipantSheet('Todos los Inscritos', preparedRows);
+  addParticipantSheet(
+    'Categoría Juvenil',
+    preparedRows.filter((r) => r.categoria === 'Juvenil')
   );
-  XLSX.utils.book_append_sheet(wb, wsJuvenil, 'Categoría Juvenil');
-
-  // Sheet 3: Libre
-  const libreRows = rows.filter(
-    (r) =>
-      r.categoria === 'Libre' ||
-      r.categoria.startsWith('Libre') ||
-      r.categoria === 'Aficionados' ||
-      r.categoria === 'Rankeado'
+  addParticipantSheet(
+    'Categoría Libre',
+    preparedRows.filter((r) => r.categoria === 'Libre')
   );
-  const wsLibre = XLSX.utils.json_to_sheet(
-    libreRows.length > 0 ? libreRows.map(toSheetObject) : [{ Aviso: 'Sin registros en Libre' }]
-  );
-  XLSX.utils.book_append_sheet(wb, wsLibre, 'Categoría Libre');
 
-  // Sheet 4: Summary
-  const summaryRows = [
-    { Indicador: 'Torneo', Valor: config.titulo },
-    { Indicador: 'Club Organizador', Valor: config.club },
-    { Indicador: 'Fecha del Evento', Valor: `${config.fecha} · ${config.hora}` },
-    { Indicador: 'Sede', Valor: config.lugar },
-    { Indicador: 'Total Inscritos', Valor: summary.totalInscritos },
-    { Indicador: 'Cupo Máximo', Valor: summary.cupoMaximo },
-    { Indicador: 'Lugares Disponibles', Valor: summary.lugaresDisponibles },
-    { Indicador: 'Pagados / Confirmados', Valor: summary.totalPagados },
-    { Indicador: 'Pendientes de Validación', Valor: summary.totalPendientes },
-    { Indicador: 'Con Recibo Adjunto', Valor: summary.totalConRecibo },
-    { Indicador: 'Categoría Juvenil', Valor: summary.totalJuvenil },
-    { Indicador: 'Categoría Libre', Valor: summary.totalLibre },
-    { Indicador: 'Postulados Mejor Aficionado', Valor: summary.totalAficionados },
-    { Indicador: 'Postuladas Mejor Femenil', Valor: summary.totalFemenil },
-    ...(isAdminExport
-      ? [
-          {
-            Indicador: 'Recaudación Confirmada (MXN)',
-            Valor: `$${summary.recaudacionConfirmada.toLocaleString('es-MX')}`,
-          },
-          {
-            Indicador: 'Recaudación Proyectada Total (MXN)',
-            Valor: `$${summary.recaudacionEsperada.toLocaleString('es-MX')}`,
-          },
-        ]
-      : []),
+  const wsSummary = workbook.addWorksheet('Resumen');
+  wsSummary.getColumn(1).width = 36;
+  wsSummary.getColumn(2).width = 48;
+  if (isAdminExport) {
+    const warn = wsSummary.addRow([CONFIDENTIAL_NOTICE]);
+    warn.font = { bold: true, color: { argb: 'FF991B1B' } };
+  }
+  const summaryHead = wsSummary.addRow(['Indicador', 'Valor']);
+  summaryHead.font = { bold: true };
+
+  const summaryItems: Array<[string, string | number]> = [
+    ['Torneo', config.titulo],
+    ['Club Organizador', config.club],
+    ['Fecha del Evento', `${config.fecha} · ${config.hora}`],
+    ['Sede', config.lugar],
+    ['Total Inscritos', summary.totalInscritos],
+    ['Cupo Máximo', summary.cupoMaximo],
+    ['Lugares Disponibles', summary.lugaresDisponibles],
+    ['Pagados / Confirmados', summary.totalPagados],
+    ['Pendientes de Validación', summary.totalPendientes],
+    ['Categoría Juvenil', summary.totalJuvenil],
+    ['Categoría Libre', summary.totalLibre],
+    ['Postulados Mejor Aficionado', summary.totalAficionados],
+    ['Postuladas Mejor Femenil', summary.totalFemenil],
   ];
-  const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
-  wsSummary['!cols'] = [{ wch: 34 }, { wch: 46 }];
-  XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen');
 
+  if (isAdminExport) {
+    summaryItems.push(
+      ['Asistencias Registradas (Check-in)', summary.totalAsistencias],
+      ['Con Recibo Adjunto', summary.totalConRecibo],
+      [
+        'Recaudación Confirmada (MXN)',
+        `$${summary.recaudacionConfirmada.toLocaleString('es-MX')}`,
+      ],
+      [
+        'Recaudación Proyectada Total (MXN)',
+        `$${summary.recaudacionEsperada.toLocaleString('es-MX')}`,
+      ]
+    );
+  }
+
+  for (const [label, val] of summaryItems) {
+    wsSummary.addRow([sanitizeSpreadsheetCell(label), sanitizeSpreadsheetCell(val)]);
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
   const dateSlug = new Date().toISOString().slice(0, 10);
   const fileName = isAdminExport
     ? `Torneo_del_Pavo_2.0_Admin_Inscritos_${dateSlug}.xlsx`
     : `Torneo_del_Pavo_2.0_Padron_Oficial_${dateSlug}.xlsx`;
 
-  XLSX.writeFile(wb, fileName);
+  triggerBlobDownload(blob, fileName);
 }
 
 /**
- * Generates and downloads a UTF-8 BOM CSV file.
+ * Generates and downloads a UTF-8 BOM CSV file with formula neutralization.
  */
-export function exportParticipantsToCSV({
-  participants,
-  isAdminExport,
-}: Omit<ExportOptions, 'config'>): void {
+export function exportParticipantsToCSV(
+  options:
+    | { participants: Participant[]; isAdminExport: true; eventFechaIso?: string }
+    | { participants: PublicParticipant[]; isAdminExport: false }
+): void {
+  const { isAdminExport } = options;
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const rows = buildParticipantExportRows(participants, {
-    includeAdminReceiptLinks: isAdminExport,
-    origin,
-  });
 
   const headers = isAdminExport
     ? [
@@ -371,64 +442,127 @@ export function exportParticipantsToCSV({
         'WhatsApp',
         'Correo Electrónico',
         'Estatus Pago',
+        'Check-in',
         'Recibo',
         'Link Recibo (Solo Admin)',
         'Fecha Registro',
       ]
     : [
         'Folio',
-        'Nombre Completo',
+        'Participante',
         'Categoría',
-        'Edad',
+        'Edad / Rango',
         'Aficionado',
         'Femenil',
         'Estatus Pago',
         'Fecha Registro',
       ];
 
-  const csvRows = rows.map((r) => {
-    const escape = (val: string) => `"${String(val || '').replace(/"/g, '""')}"`;
-    if (isAdminExport) {
-      return [
-        escape(r.folio),
-        escape(r.nombre),
-        escape(r.categoria),
-        escape(r.edad),
-        escape(r.fechaNacimiento),
-        escape(r.aficionado),
-        escape(r.femenil),
-        escape(r.whatsapp),
-        escape(r.correo),
-        escape(r.estatusPago),
-        escape(r.reciboEstado),
-        escape(r.reciboLink || ''),
-        escape(r.fechaRegistro),
-      ].join(',');
-    }
-    return [
-      escape(r.folio),
-      escape(r.nombre),
-      escape(r.categoria),
-      escape(r.edad),
-      escape(r.aficionado),
-      escape(r.femenil),
-      escape(r.estatusPago),
-      escape(r.fechaRegistro),
-    ].join(',');
-  });
+  const escapeCsv = (val: unknown) => {
+    const safe = sanitizeSpreadsheetCell(val);
+    return `"${String(safe).replace(/"/g, '""')}"`;
+  };
 
-  const blob = new Blob(['\uFEFF' + [headers.join(','), ...csvRows].join('\n')], {
+  const csvRows = isAdminExport
+    ? buildParticipantExportRows(options.participants, {
+        includeAdminReceiptLinks: true,
+        origin,
+        eventFechaIso: options.eventFechaIso,
+      }).map((r) =>
+        [
+          escapeCsv(r.folio),
+          escapeCsv(r.nombre),
+          escapeCsv(r.categoria),
+          escapeCsv(r.edad),
+          escapeCsv(r.fechaNacimiento),
+          escapeCsv(r.aficionado),
+          escapeCsv(r.femenil),
+          escapeCsv(r.whatsapp),
+          escapeCsv(r.correo),
+          escapeCsv(r.estatusPago),
+          escapeCsv(r.asistencia),
+          escapeCsv(r.reciboEstado),
+          escapeCsv(r.reciboLink || ''),
+          escapeCsv(r.fechaRegistro),
+        ].join(',')
+      )
+    : buildPublicExportRows(options.participants).map((r) =>
+        [
+          escapeCsv(r.folio),
+          escapeCsv(r.nombre),
+          escapeCsv(r.categoria),
+          escapeCsv(r.edad),
+          escapeCsv(r.aficionado),
+          escapeCsv(r.femenil),
+          escapeCsv(r.estatusPago),
+          escapeCsv(r.fechaRegistro),
+        ].join(',')
+      );
+
+  const lines = isAdminExport
+    ? [`"${CONFIDENTIAL_NOTICE}"`, headers.join(','), ...csvRows]
+    : [headers.join(','), ...csvRows];
+
+  const blob = new Blob(['\uFEFF' + lines.join('\n')], {
     type: 'text/csv;charset=utf-8;',
   });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
   const dateSlug = new Date().toISOString().slice(0, 10);
-  link.download = isAdminExport
+  const fileName = isAdminExport
     ? `Torneo_del_Pavo_2.0_Admin_Inscritos_${dateSlug}.csv`
     : `Torneo_del_Pavo_2.0_Padron_Oficial_${dateSlug}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+
+  triggerBlobDownload(blob, fileName);
+}
+
+/**
+ * Exportación CSV compatible con software de emparejamiento suizo (Swiss-Manager / Vega).
+ */
+export function exportSwissPairingCSV(participants: Participant[]): void {
+  const rows = buildSwissPairingRows(participants);
+  const escapeCsv = (val: unknown) => {
+    const safe = sanitizeSpreadsheetCell(val);
+    return `"${String(safe).replace(/"/g, '""')}"`;
+  };
+
+  const header = ['No', 'Name', 'FED', 'Sex', 'Birthday', 'Category', 'Folio', 'Paid'].join(',');
+  const lines = rows.map((r) =>
+    [
+      escapeCsv(r.num),
+      escapeCsv(r.name),
+      escapeCsv(r.fed),
+      escapeCsv(r.sex),
+      escapeCsv(r.birthYear),
+      escapeCsv(r.category),
+      escapeCsv(r.folio),
+      escapeCsv(r.paid),
+    ].join(',')
+  );
+
+  const blob = new Blob(['\uFEFF' + [header, ...lines].join('\n')], {
+    type: 'text/csv;charset=utf-8;',
+  });
+  const dateSlug = new Date().toISOString().slice(0, 10);
+  triggerBlobDownload(blob, `Torneo_del_Pavo_2.0_Emparejamiento_Suizo_${dateSlug}.csv`);
+}
+
+/**
+ * Respaldo completo en JSON (solo administrador, incluye participantes y lista de espera).
+ */
+export function exportFullBackupJson(
+  participants: Participant[],
+  waitlist: WaitlistEntry[],
+  config: TournamentConfig
+): void {
+  const payload = {
+    avisoConfidencialidad: CONFIDENTIAL_NOTICE,
+    exportadoEn: new Date().toISOString(),
+    configuracion: config,
+    participantes: participants,
+    listaEspera: waitlist,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: 'application/json;charset=utf-8',
+  });
+  const dateSlug = new Date().toISOString().slice(0, 10);
+  triggerBlobDownload(blob, `Torneo_del_Pavo_2.0_Respaldo_Admin_${dateSlug}.json`);
 }

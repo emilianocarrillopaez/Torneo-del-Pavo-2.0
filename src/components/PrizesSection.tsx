@@ -1,12 +1,12 @@
 import React from 'react';
-import { Gift, Award, Star, Trophy, Sparkles, DollarSign, CheckCircle2 } from 'lucide-react';
+import { Award, Star, Trophy, Sparkles, DollarSign, CheckCircle2 } from 'lucide-react';
 import { TournamentConfig } from '../types/tournament';
 
 interface PrizesSectionProps {
   config: TournamentConfig;
 }
 
-export const PrizesSection: React.FC<PrizesSectionProps> = ({ config }) => {
+export const PrizesSection: React.FC<PrizesSectionProps> = ({ config: _config }) => {
   return (
     <section id="premiacion" className="py-16 bg-[#0a2e1d] relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

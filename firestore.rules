@@ -2,12 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Default deny catch-all
+    // Denegar todo por defecto
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Helper functions
     function isValidId(id) {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\.@\\-]+$');
     }
@@ -16,108 +15,490 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Sin correos hardcodeados en reglas; exige email_verified == true en todas las ramas
     function isAdmin() {
-      return isSignedIn() && (
-        (
-          request.auth.token.email == 'emilianocarrillopaez@gmail.com' &&
-          request.auth.token.email_verified == true
-        ) ||
-        (
-          request.auth.token.email in [
-            'arbitro@torneodelpavo.com',
-            'comite@torneodelpavo.com',
-            'eduardoroqueta.ajedrez@gmail.com'
-          ]
-        ) ||
+      return isVerifiedUser() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
         (
           request.auth.token.email is string &&
-          request.auth.token.email_verified == true &&
-          exists(/databases/$(database)/documents/admins_by_email/$(request.auth.token.email))
+          exists(/databases/$(database)/documents/admins_by_email/$(request.auth.token.email.lower()))
         )
       );
     }
 
-    function isValidParticipant(data) {
-      return data.keys().hasAll(['nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria', 'estatusPago', 'fechaRegistro'])
-        && data.nombre is string && data.nombre.size() >= 3 && data.nombre.size() <= 150
-        && data.fechaNacimiento is string && data.fechaNacimiento.size() == 10
-        && data.whatsapp is string && data.whatsapp.size() == 10
+    function getConfig() {
+      return get(/databases/$(database)/documents/configuracion/general);
+    }
+
+    function isRegistrationOpenForConfig(cfg) {
+      return cfg != null
+        && cfg.data.inscripcionesAbiertas == true
+        && (
+          !('fechaLimiteTimestamp' in cfg.data) ||
+          (
+            cfg.data.fechaLimiteTimestamp is timestamp &&
+            request.time <= cfg.data.fechaLimiteTimestamp
+          )
+        );
+    }
+
+    function isRegistrationOpen() {
+      return isRegistrationOpenForConfig(getConfig());
+    }
+
+    function getMajorityCutoff(cfg) {
+      return (cfg != null
+        && 'fechaCorteMayoriaEdad' in cfg.data
+        && cfg.data.fechaCorteMayoriaEdad is string
+        && cfg.data.fechaCorteMayoriaEdad.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))
+        ? cfg.data.fechaCorteMayoriaEdad
+        : '2008-12-19';
+    }
+
+    function getJuvenilCutoff(cfg) {
+      return (cfg != null
+        && 'fechaCorteJuvenil' in cfg.data
+        && cfg.data.fechaCorteJuvenil is string
+        && cfg.data.fechaCorteJuvenil.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))
+        ? cfg.data.fechaCorteJuvenil
+        : '2007-12-19';
+    }
+
+    function hasMinorConsentForConfig(data, cfg) {
+      return !(data.fechaNacimiento > getMajorityCutoff(cfg)) || (
+        'consentimientoTutor' in data && data.consentimientoTutor == true &&
+        'nombreTutor' in data && data.nombreTutor is string &&
+        data.nombreTutor.trim().size() >= 3 && data.nombreTutor.size() <= 150
+      );
+    }
+
+    function isCategoryCoherentWithAge(data, cfg) {
+      return data.categoria != 'Juvenil' || data.fechaNacimiento > getJuvenilCutoff(cfg);
+    }
+
+    function hasNoAdminAuditFields(data) {
+      return !('pagadoPor' in data)
+        && !('pagadoEn' in data)
+        && !('historial' in data)
+        && !('asistencia' in data)
+        && !('asistenciaEn' in data)
+        && !('eliminado' in data)
+        && !('eliminadoEn' in data)
+        && !('eliminadoPor' in data);
+    }
+
+    function isValidParticipant(data, isCreate) {
+      return data.keys().hasOnly([
+          'nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria',
+          'estatusPago', 'fechaRegistro', 'folio', 'esFemenil', 'esAficionado',
+          'tieneRecibo', 'reciboId', 'reciboNombreArchivo', 'notas', 'website',
+          'aceptoAviso', 'aceptoAvisoVersion', 'consentimientoTutor', 'nombreTutor',
+          'fechaConsentimiento', 'pagadoPor', 'pagadoEn', 'historial',
+          'asistencia', 'asistenciaEn', 'eliminado', 'eliminadoEn', 'eliminadoPor'
+        ])
+        && data.keys().hasAll(
+          isCreate
+            ? [
+                'nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria',
+                'estatusPago', 'fechaRegistro', 'folio', 'esFemenil', 'esAficionado'
+              ]
+            : [
+                'nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria',
+                'estatusPago', 'fechaRegistro', 'folio'
+              ]
+        )
+        && data.nombre is string && data.nombre.size() >= 3 && data.nombre.size() <= 150 && data.nombre.trim() == data.nombre
+        && (!isCreate || data.nombre.matches("^[\\p{L}][\\p{L} .'-]{1,148}[\\p{L}.]$"))
+        && data.fechaNacimiento is string && data.fechaNacimiento.matches('^(19[2-9][0-9]|20[0-9]{2})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')
+        && data.whatsapp is string && (
+          isCreate
+            ? data.whatsapp.matches('^[0-9]{10}$')
+            : data.whatsapp.matches('^[0-9+\\-\\s()]{7,20}$')
+        )
         && data.correo is string && data.correo.size() >= 5 && data.correo.size() <= 100
-        && data.categoria in ['Juvenil', 'Libre', 'Aficionados', 'Rankeado', 'Niños', 'Libre - Aficionados', 'Libre - Rankeado', 'Infantil-Juvenil']
+        && (!isCreate || data.correo == data.correo.lower())
+        && data.correo.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && (
+          isCreate
+            ? data.categoria in ['Juvenil', 'Libre']
+            : data.categoria in [
+                'Juvenil', 'Libre', 'Libre - Aficionados', 'Libre - Rankeado',
+                'Niños', 'Aficionados', 'Rankeado'
+              ]
+        )
         && data.estatusPago in ['pendiente', 'pagado']
-        && data.fechaRegistro is string && data.fechaRegistro.size() <= 60
-        && (!('reciboId' in data) || (data.reciboId is string && data.reciboId.size() <= 128))
+        && data.fechaRegistro is string && data.fechaRegistro.size() >= 10 && data.fechaRegistro.size() <= 60
+        && data.folio is string && (
+          isCreate
+            ? data.folio.matches('^PAVO-[A-HJ-NP-Z2-9]{6}$')
+            : data.folio.matches('^(PAVO-[A-Z0-9]{4,10}|[A-Z0-9\\-]{4,20})$')
+        )
+        && (!('esFemenil' in data) || data.esFemenil is bool)
+        && (!('esAficionado' in data) || data.esAficionado is bool)
+        && (!isCreate || (
+          'aceptoAviso' in data && data.aceptoAviso == true &&
+          'fechaConsentimiento' in data && data.fechaConsentimiento is string &&
+          data.fechaConsentimiento.size() >= 10 && data.fechaConsentimiento.size() <= 60
+        ))
+        && (!('aceptoAviso' in data) || data.aceptoAviso is bool)
+        && (!('fechaConsentimiento' in data) || (data.fechaConsentimiento is string && data.fechaConsentimiento.size() <= 60))
+        && (!('aceptoAvisoVersion' in data) || (data.aceptoAvisoVersion is string && data.aceptoAvisoVersion.size() <= 30))
+        && (!('consentimientoTutor' in data) || data.consentimientoTutor is bool)
+        && (!('nombreTutor' in data) || (data.nombreTutor is string && data.nombreTutor.size() <= 150))
+        && (!('tieneRecibo' in data) || data.tieneRecibo is bool)
+        && (!('reciboId' in data) || (data.reciboId is string && isValidId(data.reciboId)))
         && (!('reciboNombreArchivo' in data) || (data.reciboNombreArchivo is string && data.reciboNombreArchivo.size() <= 180))
-        && (!('tieneRecibo' in data) || data.tieneRecibo is bool);
+        && (!('tieneRecibo' in data) || data.tieneRecibo == true || (!('reciboId' in data) && !('reciboNombreArchivo' in data)))
+        && (!('notas' in data) || (data.notas is string && data.notas.size() <= 500))
+        && (!('website' in data) || data.website == '')
+        && (!('pagadoPor' in data) || (data.pagadoPor is string && data.pagadoPor.size() <= 120))
+        && (!('pagadoEn' in data) || (data.pagadoEn is string && data.pagadoEn.size() <= 60))
+        && (!('historial' in data) || (data.historial is list && data.historial.size() <= 50))
+        && (!('asistencia' in data) || data.asistencia is bool)
+        && (!('asistenciaEn' in data) || (data.asistenciaEn is string && data.asistenciaEn.size() <= 60))
+        && (!('eliminado' in data) || data.eliminado is bool)
+        && (!('eliminadoEn' in data) || (data.eliminadoEn is string && data.eliminadoEn.size() <= 60))
+        && (!('eliminadoPor' in data) || (data.eliminadoPor is string && data.eliminadoPor.size() <= 120));
+    }
+
+    function validatePublicParticipantCreateWithConfig(data, participanteId, cfg) {
+      return isRegistrationOpenForConfig(cfg)
+        && data.estatusPago == 'pendiente'
+        && data.tieneRecibo == true
+        && 'reciboId' in data
+        && !exists(/databases/$(database)/documents/comprobantes/$(data.reciboId))
+        && existsAfter(/databases/$(database)/documents/comprobantes/$(data.reciboId))
+        && getAfter(/databases/$(database)/documents/comprobantes/$(data.reciboId)).data.participantId == participanteId
+        && existsAfter(/databases/$(database)/documents/participantes_publicos/$(participanteId))
+        && (!('notas' in data) || data.notas == '')
+        && hasNoAdminAuditFields(data)
+        && hasMinorConsentForConfig(data, cfg)
+        && isCategoryCoherentWithAge(data, cfg);
+    }
+
+    function isValidPublicParticipant(data, allowAdminDigits) {
+      return data.keys().hasOnly([
+          'folio', 'nombre', 'categoria', 'esAficionado', 'esFemenil',
+          'estatusPago', 'rangoEdad', 'edad', 'fechaRegistro'
+        ])
+        && data.keys().hasAll([
+          'folio', 'nombre', 'categoria', 'esAficionado', 'esFemenil',
+          'estatusPago', 'fechaRegistro'
+        ])
+        && data.folio is string && (
+          allowAdminDigits
+            ? data.folio.matches('^(PAVO-[A-Z0-9]{4,10}|[A-Z0-9\\-]{4,20})$')
+            : data.folio.matches('^PAVO-[A-Z0-9]{4,10}$')
+        )
+        && data.nombre is string && data.nombre.size() >= 3 && data.nombre.size() <= 150 && data.nombre.trim() == data.nombre
+        && (
+          allowAdminDigits
+            ? data.nombre.matches("^[\\p{L}0-9][\\p{L}0-9 .'-]{1,148}[\\p{L}0-9.]$")
+            : data.nombre.matches("^[\\p{L}][\\p{L} .'-]{1,148}[\\p{L}.]$")
+        )
+        && data.categoria in ['Juvenil', 'Libre']
+        && data.esAficionado is bool
+        && data.esFemenil is bool
+        && data.estatusPago in ['pendiente', 'pagado']
+        && data.fechaRegistro is string && data.fechaRegistro.size() >= 10 && data.fechaRegistro.size() <= 60
+        && (!('rangoEdad' in data) || (data.rangoEdad is string && data.rangoEdad.size() <= 40))
+        && (!('edad' in data) || (
+          allowAdminDigits
+            ? (data.edad is number && data.edad >= 3 && data.edad <= 110)
+            : (data.edad is number && data.edad >= 18 && data.edad <= 110)
+        ));
+    }
+
+    function validatePublicRosterMatch(pubData, privAfter, cfg) {
+      return pubData.estatusPago == 'pendiente'
+        && pubData.folio == privAfter.data.folio
+        && pubData.categoria == privAfter.data.categoria
+        && pubData.esAficionado == privAfter.data.esAficionado
+        && pubData.esFemenil == privAfter.data.esFemenil
+        && pubData.estatusPago == privAfter.data.estatusPago
+        && pubData.fechaRegistro == privAfter.data.fechaRegistro
+        && pubData.nombre.split(' ')[0] == privAfter.data.nombre.split(' ')[0]
+        && (!(privAfter.data.fechaNacimiento > getMajorityCutoff(cfg)) || !('edad' in pubData));
+    }
+
+    function isValidWaitlistEntry(data, isCreate) {
+      return data.keys().hasOnly([
+          'nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria',
+          'esFemenil', 'esAficionado', 'estatus', 'fechaRegistro', 'folio',
+          'aceptoAviso', 'aceptoAvisoVersion', 'consentimientoTutor', 'nombreTutor',
+          'fechaConsentimiento', 'notas', 'website'
+        ])
+        && data.keys().hasAll([
+          'nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria',
+          'estatus', 'fechaRegistro', 'folio'
+        ])
+        && data.nombre is string && data.nombre.size() >= 3 && data.nombre.size() <= 150 && data.nombre.trim() == data.nombre
+        && (!isCreate || data.nombre.matches("^[\\p{L}][\\p{L} .'-]{1,148}[\\p{L}.]$"))
+        && data.fechaNacimiento is string && data.fechaNacimiento.matches('^(19[2-9][0-9]|20[0-9]{2})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')
+        && data.whatsapp is string && data.whatsapp.matches('^[0-9]{10}$')
+        && data.correo is string && data.correo.size() >= 5 && data.correo.size() <= 100 && data.correo == data.correo.lower() && data.correo.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && data.categoria in ['Juvenil', 'Libre']
+        && data.estatus in ['en_espera', 'contactado', 'convertido']
+        && data.fechaRegistro is string && data.fechaRegistro.size() >= 10 && data.fechaRegistro.size() <= 60
+        && data.folio is string && data.folio.matches('^ESPERA-[A-Z0-9]{4,10}$')
+        && (!('esFemenil' in data) || data.esFemenil is bool)
+        && (!('esAficionado' in data) || data.esAficionado is bool)
+        && (!isCreate || (
+          'aceptoAviso' in data && data.aceptoAviso == true &&
+          'fechaConsentimiento' in data && data.fechaConsentimiento is string &&
+          data.fechaConsentimiento.size() >= 10 && data.fechaConsentimiento.size() <= 60
+        ))
+        && (!('aceptoAviso' in data) || data.aceptoAviso is bool)
+        && (!('fechaConsentimiento' in data) || (data.fechaConsentimiento is string && data.fechaConsentimiento.size() <= 60))
+        && (!('aceptoAvisoVersion' in data) || (data.aceptoAvisoVersion is string && data.aceptoAvisoVersion.size() <= 30))
+        && (!('consentimientoTutor' in data) || data.consentimientoTutor is bool)
+        && (!('nombreTutor' in data) || (data.nombreTutor is string && data.nombreTutor.size() <= 150))
+        && (!('notas' in data) || (data.notas is string && data.notas.size() <= 500))
+        && (!('website' in data) || data.website == '');
+    }
+
+    function validatePublicWaitlistCreate(data, cfg) {
+      return isRegistrationOpenForConfig(cfg)
+        && (!('habilitarListaEspera' in cfg.data) || cfg.data.habilitarListaEspera == true)
+        && data.estatus == 'en_espera'
+        && (!('notas' in data) || data.notas == '')
+        && hasMinorConsentForConfig(data, cfg)
+        && isCategoryCoherentWithAge(data, cfg);
     }
 
     function isValidComprobante(data) {
-      return data.keys().hasAll(['folio', 'participantNombre', 'fileName', 'mimeType', 'imageDataUrl', 'uploadedAt'])
-        && data.folio is string && data.folio.size() >= 4 && data.folio.size() <= 30
+      return data.keys().hasOnly([
+          'participantId', 'folio', 'participantNombre', 'fileName',
+          'mimeType', 'fileSize', 'imageDataUrl', 'uploadedAt'
+        ])
+        && data.keys().hasAll([
+          'participantId', 'folio', 'participantNombre', 'fileName',
+          'mimeType', 'fileSize', 'imageDataUrl', 'uploadedAt'
+        ])
+        && isValidId(data.participantId)
+        && data.folio is string && data.folio.size() >= 3 && data.folio.size() <= 30
         && data.participantNombre is string && data.participantNombre.size() >= 3 && data.participantNombre.size() <= 150
-        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 200
-        && data.mimeType is string && data.mimeType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 200 && !data.fileName.matches('.*[/\\\\].*')
+        && data.mimeType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+        && data.fileSize is number && data.fileSize >= 1 && data.fileSize <= 950000
         && data.imageDataUrl is string && data.imageDataUrl.size() >= 30 && data.imageDataUrl.size() <= 950000
+        && (
+          (data.mimeType == 'image/jpeg' && data.imageDataUrl.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$')) ||
+          (data.mimeType == 'image/png' && data.imageDataUrl.matches('^data:image/png;base64,[A-Za-z0-9+/=]+$')) ||
+          (data.mimeType == 'image/webp' && data.imageDataUrl.matches('^data:image/webp;base64,[A-Za-z0-9+/=]+$')) ||
+          (data.mimeType == 'application/pdf' && data.imageDataUrl.matches('^data:application/pdf;base64,[A-Za-z0-9+/=]+$'))
+        )
         && data.uploadedAt is string && data.uploadedAt.size() <= 60;
     }
 
-    // Participants collection (no receipt image data stored here — only opaque reciboId)
+    function isValidConfig(data) {
+      return data.keys().hasOnly([
+          'titulo', 'edicion', 'slogan', 'club', 'fecha', 'fechaIso', 'hora',
+          'lugar', 'referencia', 'mapaUrl', 'costo', 'cupoMaximo', 'totalInscritos',
+          'fechaLimite', 'fechaLimiteIso', 'fechaLimiteTimestamp', 'fechaCorteMayoriaEdad',
+          'fechaCorteJuvenil', 'habilitarListaEspera', 'politicaDevolucionTexto',
+          'inscripcionesAbiertas', 'clabe', 'banco', 'titular', 'whatsappContacto',
+          'bolsaPremios', 'primerLugarEfectivo', 'presidente', 'vicepresidente',
+          'premiacionTexto', 'sistemaCompetenciaTexto', 'transitoriosTexto', 'indicacionesPago'
+        ])
+        && data.keys().hasAll(['titulo', 'fecha', 'costo', 'cupoMaximo', 'inscripcionesAbiertas'])
+        && data.titulo is string && data.titulo.size() >= 3 && data.titulo.size() <= 150
+        && data.fecha is string && data.fecha.size() >= 3 && data.fecha.size() <= 100
+        && data.costo is number && data.costo >= 0 && data.costo <= 100000
+        && data.cupoMaximo is number && data.cupoMaximo >= 1 && data.cupoMaximo <= 5000
+        && data.inscripcionesAbiertas is bool
+        && (!('totalInscritos' in data) || (data.totalInscritos is number && data.totalInscritos >= 0))
+        && (!('mapaUrl' in data) || data.mapaUrl == '' || data.mapaUrl == '#' || data.mapaUrl.matches('^https://[^\\s]+$'))
+        && (!('fechaLimiteTimestamp' in data) || data.fechaLimiteTimestamp is timestamp)
+        && (!('fechaLimiteIso' in data) || (data.fechaLimiteIso is string && data.fechaLimiteIso.size() <= 60))
+        && (!('fechaCorteMayoriaEdad' in data) || (data.fechaCorteMayoriaEdad is string && data.fechaCorteMayoriaEdad.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
+        && (!('fechaCorteJuvenil' in data) || (data.fechaCorteJuvenil is string && data.fechaCorteJuvenil.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
+        && (!('habilitarListaEspera' in data) || data.habilitarListaEspera is bool)
+        && (!('politicaDevolucionTexto' in data) || (data.politicaDevolucionTexto is string && data.politicaDevolucionTexto.size() <= 2000))
+        && (!('whatsappContacto' in data) || (data.whatsappContacto is string && data.whatsappContacto.size() <= 20))
+        && (!('clabe' in data) || (data.clabe is string && data.clabe.size() <= 30));
+    }
+
+    function isValidSponsor(data) {
+      return data.keys().hasOnly(['nombre', 'logo', 'enlace', 'activo', 'orden', 'categoriaSponsor'])
+        && data.keys().hasAll(['nombre', 'logo', 'activo'])
+        && data.nombre is string && data.nombre.size() >= 1 && data.nombre.size() <= 100
+        && data.activo is bool
+        && data.logo is string && data.logo.size() <= 950000
+        && (
+          data.logo == '' ||
+          data.logo.matches('^https://[^\\s]+$') ||
+          data.logo.matches('^data:image/(jpeg|png|webp|svg\\+xml)(;base64,|;charset=UTF-8,).*$')
+        )
+        && (!('enlace' in data) || data.enlace == '' || data.enlace == '#' || data.enlace.matches('^https://[^\\s]+$'))
+        && (!('orden' in data) || data.orden is number)
+        && (!('categoriaSponsor' in data) || (data.categoriaSponsor is string && data.categoriaSponsor.size() <= 120));
+    }
+
+    function isValidAdminMember(data) {
+      return data.keys().hasOnly(['email', 'nombre', 'rol', 'agregadoEn'])
+        && data.keys().hasAll(['email', 'nombre', 'rol'])
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 120 && data.email == data.email.lower() && data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && data.nombre is string && data.nombre.size() >= 2 && data.nombre.size() <= 120
+        && data.rol is string && data.rol.size() >= 2 && data.rol.size() <= 80
+        && (!('agregadoEn' in data) || (data.agregadoEn is string && data.agregadoEn.size() <= 60));
+    }
+
+    // Colección privada de participantes (PII: correo, WhatsApp, nacimiento, reciboId, tutor)
     match /participantes/{participanteId} {
-      // Allow reading so participants and organizers can view the public roster
-      allow read: if true;
+      allow get, list: if isAdmin();
 
-      // Public can register (create) with validation
       allow create: if isValidId(participanteId)
-        && isValidParticipant(request.resource.data)
-        && request.resource.data.estatusPago == 'pendiente'
-        && (!('website' in request.resource.data) || request.resource.data.website == '');
+        && isValidParticipant(request.resource.data, true)
+        && (
+          isAdmin()
+          || validatePublicParticipantCreateWithConfig(request.resource.data, participanteId, getConfig())
+        );
 
-      // Only admins can update (change payment status, fix details) or delete
-      allow update: if isAdmin() && isValidId(participanteId) && isValidParticipant(request.resource.data);
+      allow update: if isAdmin()
+        && isValidId(participanteId)
+        && isValidParticipant(request.resource.data, false);
+
       allow delete: if isAdmin() && isValidId(participanteId);
     }
 
-    // Private payment receipts vault — WRITE-ONLY for public at registration, READ/MANAGE strictly ADMIN-ONLY
+    // Colección pública sanitizada para el padrón (cero datos de contacto, nacimiento, tutor ni recibos)
+    match /participantes_publicos/{participanteId} {
+      allow read: if true;
+
+      allow create: if isValidId(participanteId)
+        && existsAfter(/databases/$(database)/documents/participantes/$(participanteId))
+        && (
+          (isAdmin() && isValidPublicParticipant(request.resource.data, true))
+          || (
+            isValidPublicParticipant(request.resource.data, false)
+            && validatePublicRosterMatch(
+              request.resource.data,
+              getAfter(/databases/$(database)/documents/participantes/$(participanteId)),
+              getConfig()
+            )
+          )
+        );
+
+      allow update: if isAdmin()
+        && isValidId(participanteId)
+        && isValidPublicParticipant(request.resource.data, true);
+
+      allow delete: if isAdmin() && isValidId(participanteId);
+    }
+
+    // Lista de espera cuando el cupo esté agotado (solo lectura admin; escritura protegida por reglas)
+    match /lista_espera/{esperaId} {
+      allow get, list: if isAdmin();
+
+      allow create: if isValidWaitlistEntry(request.resource.data, true)
+        && (
+          (isAdmin() && isValidId(esperaId))
+          || (
+            esperaId is string
+            && esperaId.matches('^[a-f0-9]{64}$')
+            && validatePublicWaitlistCreate(request.resource.data, getConfig())
+          )
+        );
+
+      allow update: if isAdmin()
+        && isValidId(esperaId)
+        && isValidWaitlistEntry(request.resource.data, false);
+
+      allow delete: if isAdmin() && isValidId(esperaId);
+    }
+
+    // Llaves deterministas SHA-256 para evitar duplicados sin permitir enumeración
+    match /registro_llaves/{hashId} {
+      allow get, list, update: if false;
+
+      allow create: if hashId is string
+        && hashId.matches('^[a-f0-9]{64}$')
+        && request.resource.data.keys().hasOnly(['tipo', 'participantId', 'createdAt'])
+        && request.resource.data.keys().hasAll(['tipo', 'participantId', 'createdAt'])
+        && request.resource.data.tipo in ['email', 'whatsapp']
+        && isValidId(request.resource.data.participantId)
+        && request.resource.data.createdAt is string && request.resource.data.createdAt.size() <= 60
+        && (
+          isAdmin()
+          || (
+            isRegistrationOpen()
+            && !exists(/databases/$(database)/documents/participantes/$(request.resource.data.participantId))
+            && existsAfter(/databases/$(database)/documents/participantes/$(request.resource.data.participantId))
+          )
+        );
+
+      allow delete: if isAdmin() && hashId is string && hashId.matches('^[a-f0-9]{64}$');
+    }
+
+    // Bóveda privada de comprobantes (solo admin lee, actualiza o borra)
     match /comprobantes/{comprobanteId} {
       allow read: if isAdmin();
-      allow create: if isValidId(comprobanteId) && isValidComprobante(request.resource.data);
-      allow update, delete: if isAdmin() && isValidId(comprobanteId);
+
+      allow create: if isValidId(comprobanteId)
+        && isValidComprobante(request.resource.data)
+        && (
+          isAdmin()
+          || (
+            isRegistrationOpen()
+            && !exists(/databases/$(database)/documents/participantes/$(request.resource.data.participantId))
+            && existsAfter(/databases/$(database)/documents/participantes/$(request.resource.data.participantId))
+            && getAfter(/databases/$(database)/documents/participantes/$(request.resource.data.participantId)).data.reciboId == comprobanteId
+            && getAfter(/databases/$(database)/documents/participantes/$(request.resource.data.participantId)).data.folio == request.resource.data.folio
+          )
+        );
+
+      allow update: if isAdmin()
+        && isValidId(comprobanteId)
+        && isValidComprobante(request.resource.data);
+
+      allow delete: if isAdmin() && isValidId(comprobanteId);
     }
 
-    // Configuration collection (Tournament settings, texts, and public counts)
+    // Configuración del torneo (Opción A: sin escritura pública a totalInscritos)
     match /configuracion/{configId} {
       allow read: if true;
-      allow update: if isAdmin() || (
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalInscritos'])
-        && request.resource.data.totalInscritos is number
-      );
-      allow create, delete: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(configId) && isValidConfig(request.resource.data);
+      allow delete: if isAdmin() && isValidId(configId);
     }
 
-    // Sponsors collection
+    // Patrocinadores
     match /patrocinadores/{patrocinadorId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(patrocinadorId) && isValidSponsor(request.resource.data);
+      allow delete: if isAdmin() && isValidId(patrocinadorId);
     }
 
-    // Admins collections
+    // Administradores por UID y por correo normalizado
     match /admins/{adminId} {
-      allow read: if isSignedIn() && (request.auth.uid == adminId || isAdmin());
-      allow write: if isAdmin();
+      allow get: if isVerifiedUser() && (request.auth.uid == adminId || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(adminId) && isValidAdminMember(request.resource.data);
+      allow delete: if isAdmin() && isValidId(adminId);
     }
 
     match /admins_by_email/{emailId} {
-      allow read: if isSignedIn() && (
-        (request.auth.token.email is string && request.auth.token.email == emailId) ||
+      allow get: if isVerifiedUser() && (
+        (request.auth.token.email is string && request.auth.token.email.lower() == emailId) ||
         isAdmin()
       );
-      allow write: if isAdmin();
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && isValidId(emailId)
+        && emailId == emailId.lower()
+        && isValidAdminMember(request.resource.data)
+        && request.resource.data.email == emailId;
+      allow delete: if isAdmin() && isValidId(emailId);
     }
 
-    // Health check connection test document
+    // Documento único de comprobación de conectividad
     match /test/{docId} {
-      allow read: if true;
+      allow get: if docId == 'connection';
+      allow list, write: if false;
     }
   }
 }

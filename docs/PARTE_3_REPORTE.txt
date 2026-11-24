@@ -1,0 +1,825 @@
+================================================================================
+TORNEO DEL PAVO 2.0 · CLUB DE AJEDREZ DON GONZALO (DURANGO, DGO.)
+REPORTE FINAL CONSOLIDADO — PARTE 3 DE 3 (FINAL)
+Cierre de riesgos, Pruebas/CI, Migración a Cloudflare Pages y Documentación
+Fecha de entrega: 24 de noviembre de 2026
+================================================================================
+
+--------------------------------------------------------------------------------
+1. RESUMEN EJECUTIVO
+--------------------------------------------------------------------------------
+La aplicación web del Torneo del Pavo 2.0 está técnicamente blindada, migrada en
+código y configuración para publicarse gratis en Cloudflare Pages (manteniendo
+Firestore, Google Auth y App Check en Firebase Spark), y acompañada de guías no
+técnicas completas en docs/. No está lista para abrir inscripciones públicas
+todavía porque faltan acciones manuales y de infraestructura que no pueden
+hacerse desde este contenedor aislado: falta crear un repositorio Git y empujar a
+GitHub para que GitHub Actions ejecute las 34 pruebas de reglas en emulador
+(Java) y E2E reales; falta publicar en Cloudflare Pages, capturar al primer
+administrador y los datos bancarios reales en Firestore, activar App Check tras
+verificar tráfico real, y correr la prueba de humo en celular y navegadores.
+Ningún secreto, CLABE real ni URL temporal quedó en el código ni en los activos.
+
+--------------------------------------------------------------------------------
+2. TABLA CONSOLIDADA FINAL (HALLAZGOS H1–H21, R1–R7, FASES 3.x, 4.x, 5.x)
+--------------------------------------------------------------------------------
+Leyenda estricta:
+- [VERIFICADO] = ejecutado y comprobado por mí en este entorno.
+- [NO VERIFICADO] = corregido/configurado en código o reglas, pero sin ejecución
+  en vivo por falta de Java/emulador, GitHub remoto o cuenta Cloudflare/Firebase.
+
+--- Hallazgos de Auditoría (Parte 1 y 2) ---
+H1  | Padrón público sin PII (/participantes_publicos, sin edad exacta de menores)
+    -> Corregido y verificado [VERIFICADO en código/unitarias/build; pruebas emulador V1–V34 NO VERIFICADAS aquí]
+H2  | Acceso admin sin correos fijos (/admins, /admins_by_email, email_verified, timeout 30m)
+    -> Corregido y verificado [VERIFICADO en código/lint/preview]
+H3  | Conteo en servidor (getCountFromServer, sin escritura pública a totalInscritos)
+    -> Corregido y verificado [VERIFICADO en código/reglas desplegadas]
+H4  | Comprobantes privados (magic bytes, regex data:, visor PDF sandbox Blob URL)
+    -> Corregido y verificado [VERIFICADO en unitarias; visor PDF en vivo con emulador NO VERIFICADO aquí]
+H5  | Firebase App Check (reCAPTCHA Enterprise + activación escalonada)
+    -> Corregido en código / Pendiente manual en Firebase Console [NO VERIFICADO en prod]
+H6  | Reglas estrictas (hasOnly, tamaños, denegación por defecto)
+    -> Corregido y desplegado en base con nombre [VERIFICADO lint:rules; emulador NO VERIFICADO aquí]
+H7  | Prevención de duplicados (/registro_llaves SHA-256)
+    -> Corregido y verificado en unitarias/reglas [emulador NO VERIFICADO aquí]
+H8  | writeBatch atómico de 5 docs + cierre por fechaLimiteTimestamp
+    -> Corregido y desplegado [emulador NO VERIFICADO aquí]
+H9  | Folios impredecibles con crypto.getRandomValues (PAVO-XXXXXX / ESPERA-XXXXXX)
+    -> Corregido y verificado [VERIFICADO en unitarias]
+H10 | Exportación segura con exceljs + sanitizeSpreadsheetCell
+    -> Corregido y verificado [VERIFICADO en unitarias y build]
+H11 | Validación de URLs externas (safeHttpUrl / formatWhatsAppUrl)
+    -> Corregido y verificado [VERIFICADO en unitarias]
+H12 | Base con nombre en firebase.json + retiro total de Firebase Hosting
+    -> Corregido y verificado [VERIFICADO en firebase.json, docs y build]
+H13 | Aviso de Privacidad ARCO + consentimiento obligatorio de tutor para menores
+    -> Corregido y verificado [VERIFICADO en unitarias]
+H14 | Cero credenciales bancarias en código + bloqueo automático de datos ejemplo
+    -> Corregido y verificado [VERIFICADO en unitarias y navegador]
+H15 | Sincronización de security_spec.md y firebase-blueprint.json
+    -> Corregido y verificado [VERIFICADO en archivos]
+H16 | Parsing seguro de #admin-recibo= + ErrorBoundary
+    -> Corregido y verificado [VERIFICADO en código/build]
+H17 | Eliminado seed en visitas públicas; restauración solo-admin
+    -> Corregido y verificado [VERIFICADO en código]
+H18 | Cortes de edad dinámicos (deriveAgeCutoffs(fechaIso))
+    -> Corregido y verificado [VERIFICADO en unitarias]
+H19 | Único lockfile (bun.lock), auditoría limpia, scripts completos
+    -> Corregido y verificado [VERIFICADO con instalación limpia y bun audit]
+H20 | WebP, lazy-loading de Admin/PDF/Excel, SEO dinámico con VITE_SITE_URL
+    -> Corregido y verificado [VERIFICADO en build: dist/robots.txt y sitemap.xml]
+H21 | Mensajes de error amigables sin filtrar internos (errorMessages.ts)
+    -> Corregido y verificado [VERIFICADO en unitarias]
+R1–R7 | Regresiones Parte 2 (liga 1:1 comprobante-participante, Juvenil, purga/anonimización, getConfig)
+    -> Corregido y desplegado en base con nombre; V1–V34 listos [emulador NO VERIFICADO aquí]
+
+--- Fase 5.0 (Cierre de Riesgos Parte 3: 3.1–3.6) ---
+3.1 | Nombre privado vs público (buildParticipantNames + regex Unicode \p{L})
+    -> Corregido y desplegado en reglas [VERIFICADO en unitarias; V33 en emulador NO VERIFICADO aquí]
+3.2 | Lista de espera con ID determinista SHA-256 + botón «Vaciar convertidos / antiguos»
+    -> Corregido y desplegado en reglas [VERIFICADO en lint/build; V32 en emulador NO VERIFICADO aquí]
+3.3 | Fragmentación de lotes admin (constantes 10 / 8 / 4 + progreso visible)
+    -> Corregido en código [VERIFICADO en build/lint; V34 en emulador NO VERIFICADO aquí]
+3.4 | Despliegue real de reglas en base con nombre + verificación visual en consola
+    -> Reglas desplegadas vía DeployRules; verificación visual en consola -> PENDIENTE MANUAL
+3.5 | Instalación limpia desde cero con bun.lock + bun audit (0 vulnerabilidades)
+    -> Corregido y verificado [VERIFICADO en /tmp/pavo-clean]
+3.6 | Optimización de lecturas en padrón público (listener único, límite 500, caché 60s, visibilitychange)
+    -> Corregido y verificado [VERIFICADO en código y build]
+
+--- Fase 5.1 (Pruebas y CI: 4.1–4.3) ---
+4.1 | CI con Java 17 para `npm run test:rules` (V1–V34) + docker-compose opcional
+    -> Configurado [NO VERIFICADO en ejecución real por falta de Java y de repo Git en el contenedor]
+4.2 | Suite Playwright E2E + Axe contra build + emulador (`tests/e2e/app.spec.ts`)
+    -> Implementado [NO VERIFICADO contra emulador por falta de Java; navegación/rutas/consola en vite preview SÍ VERIFICADAS]
+4.3 | Lighthouse CI (`lighthouserc.json` + `.github/workflows/ci.yml`) + guía PageSpeed
+    -> Configurado y documentado [NO VERIFICADO en ejecución real]
+
+--- Fase 5.2 (Cloudflare Pages, Entornos y Docs: 5.1–5.6) ---
+5.1 | Pipeline `.github/workflows/ci.yml` + `.github/dependabot.yml` + protección de rama `main`
+    -> Implementado y documentado [NO VERIFICADO en GitHub Actions remoto]
+5.2 | Documentación de despliegue Git en Cloudflare Pages + modo alterno Wrangler CI
+    -> Documentado en `docs/DESPLIEGUE-CLOUDFLARE.md`
+5.3.1 | Retiro `hosting` de `firebase.json`, `VITE_SITE_URL` obligatorio en build, `.node-version`, `VITE_APP_ENV`, limpieza de Hosting
+    -> Corregido y verificado [VERIFICADO en build y rechazo negativo `STRICT_SITE_URL=1`]
+5.3.2 | Fuente única de verdad `scripts/security-headers.mjs` -> `dist/_headers` + `vite.config.ts`
+    -> Corregido y verificado [VERIFICADO con pruebas unitarias y `curl -I` sobre `vite preview`]
+5.3.3–5.3.7 | Pasos de panel Cloudflare, lista 5.3.4, límites verificados, Plan B Workers
+    -> Documentado en `docs/DESPLIEGUE-CLOUDFLARE.md`, `PLAN-DE-CAPACIDAD.md`, `PRUEBA-DE-HUMO.md`
+5.4 | Post-cambio de dominio (Auth, reCAPTCHA Enterprise, restricción API key) -> PENDIENTE MANUAL
+5.5 | Staging (`.firebaserc`, `src/lib/firebase.ts`), `dev:emulator`, `seed:emulator`, `loadtest:emulator`
+    -> Implementado [NO VERIFICADO contra emulador por falta de Java]
+5.6 | Monitoreo, contingencia de cuota y rollback < 5 min
+    -> Documentado en `docs/PLAN-DE-CAPACIDAD.md`, `DESPLIEGUE-CLOUDFLARE.md`, `RUNBOOK-INCIDENTES.md`
+
+--------------------------------------------------------------------------------
+3. ARCHIVOS DE CLOUDFLARE PAGES, CONTENIDO FINAL DE `_headers` Y DIFERENCIA CSP
+--------------------------------------------------------------------------------
+Archivos creados o modificados para Cloudflare Pages, CI y operación:
+- `firebase.json` (se eliminó por completo la sección `"hosting"`; solo Firestore)
+- `.firebaserc` (alias `default`/`production` -> `yogic-decoder-5lxdt` + `staging`)
+- `.node-version` (`22.23.5`)
+- `scripts/security-headers.mjs` (fuente única de verdad para cabeceras y límites)
+- `scripts/generate-seo-files.mjs` (genera `public/_headers`, `public/robots.txt`, `public/sitemap.xml`; aborta si falta `VITE_SITE_URL`)
+- `vite.config.ts` (inyecta `getPreviewHeaders` de `scripts/security-headers.mjs`)
+- `index.html` y `src/App.tsx` (usan `%VITE_SITE_URL%` / `import.meta.env.VITE_SITE_URL`)
+- `src/lib/firebase.ts` y `src/vite-env.d.ts` (soporte `VITE_APP_ENV=staging` + emulador)
+- `package.json`, `.env.example`, `eslint.config.mjs`
+- `scripts/run-rules-tests.mjs`, `scripts/seed-emulator.mjs`, `scripts/load-test-emulator.mjs`, `docker-compose.yml`
+- `tests/rules/firestore.rules.test.ts` (V1–V34), `tests/e2e/app.spec.ts`, `playwright.config.ts`, `lighthouserc.json`
+- `.github/workflows/ci.yml`, `.github/dependabot.yml`
+- Documentación: `README.md`, `SECURITY.md`, `CHANGELOG.md`, `security_spec.md`,
+  `firebase-blueprint.json`, `docs/AUDITORIA.md`, `docs/DESPLIEGUE-CLOUDFLARE.md`,
+  `docs/PASOS-MANUALES.md`, `docs/PRUEBA-DE-HUMO.md`, `docs/PLAN-DE-CAPACIDAD.md`,
+  `docs/GUIA-ADMIN.md`, `docs/LANZAMIENTO-CHECKLIST.md`, `docs/RUNBOOK-INCIDENTES.md`,
+  `docs/PARTE_3_REPORTE.txt`.
+
+Contenido final exacto generado en `dist/_headers` (9 reglas; línea máx. 812 chars vs. límites Cloudflare de 100 reglas y 2,000 chars/línea):
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://apis.google.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseappcheck.googleapis.com https://content-firebaseappcheck.googleapis.com https://www.googleapis.com https://www.google.com; frame-src 'self' blob: https://accounts.google.com https://yogic-decoder-5lxdt.firebaseapp.com https://www.google.com https://recaptcha.google.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/index.html
+  Cache-Control: no-cache
+
+/favicon.png
+  Cache-Control: public, max-age=604800
+
+/apple-touch-icon.png
+  Cache-Control: public, max-age=604800
+
+/icon-192.png
+  Cache-Control: public, max-age=604800
+
+/icon-512.png
+  Cache-Control: public, max-age=604800
+
+/admin
+  X-Robots-Tag: noindex, nofollow
+
+/admin/*
+  X-Robots-Tag: noindex, nofollow
+
+Cambios de orígenes/directivas respecto de la línea base 5.3.2 y justificación:
+1. `frame-src`: se sustituyó `TU-AUTH-DOMAIN` por `yogic-decoder-5lxdt.firebaseapp.com`
+   (el `authDomain` real de `firebase-applet-config.json`, o `VITE_FIREBASE_STAGING_AUTH_DOMAIN`
+   si `VITE_APP_ENV=staging`) para permitir el popup/iframe oficial de Google Sign-In.
+2. `connect-src`: se añadió `https://content-firebaseappcheck.googleapis.com`, porque el SDK
+   oficial `@firebase/app-check` realiza ahí el intercambio de tokens de reCAPTCHA Enterprise
+   (`exchangeRecaptchaEnterpriseToken`).
+3. Cabeceras adicionales en `/*`: se añadió `X-Frame-Options: DENY` como respaldo para navegadores
+   antiguos junto a `frame-ancestors 'none'`, y reglas de caché de 7 días para `/favicon.png`,
+   `/apple-touch-icon.png`, `/icon-192.png` y `/icon-512.png`.
+4. Reglas respetadas: NO se incluyó `Cross-Origin-Opener-Policy: same-origin` (rompe popup de Google),
+   NO se agregó `unsafe-inline` ni `unsafe-eval` en `script-src`, y los orígenes de emulador local
+   (`127.0.0.1:8080/9099`) solo se permiten en `vite preview` cuando `VITE_USE_FIRESTORE_EMULATOR=true`,
+   nunca en `dist/_headers`.
+
+--------------------------------------------------------------------------------
+4. RESULTADOS REALES DE PRUEBAS, BUILD Y AUDITORÍA
+--------------------------------------------------------------------------------
+- Pruebas unitarias (`bun run test` -> `tsx --test src/utils/tournamentUtils.test.ts`):
+  EJECUTADO [VERIFICADO]: **19 / 19 pruebas aprobadas** (0 fallidas, duración ~557–610 ms).
+  Incluye pruebas nuevas de `buildParticipantNames` + `validateRegistrationInput` (nombres
+  compuestos, partículas «De la Cruz» / «Del Río», apóstrofos «O'Connor», guiones «Pérez-Soto»,
+  acentos/ñ/diéresis «Chloë» / «François» / «Ïñigo», un solo apellido) y verificación automática
+  de límites y CSP de `scripts/security-headers.mjs`.
+- Validación de tipos y ESLint (`bun run lint` -> `tsc --noEmit && eslint .`):
+  EJECUTADO [VERIFICADO]: **0 errores** (3 advertencias esperadas de lectura pública en
+  `participantes_publicos`, `configuracion` y `patrocinadores`).
+- Lint de reglas (`bun run lint:rules` -> `eslint firestore.rules`):
+  EJECUTADO [VERIFICADO]: **0 errores** (3 advertencias intencionales de lectura pública).
+- Validación negativa de URL (`STRICT_SITE_URL=1 VITE_SITE_URL="" node scripts/generate-seo-files.mjs`):
+  EJECUTADO [VERIFICADO]: falló con código distinto de 0 y mensaje claro indicando que
+  `VITE_SITE_URL` es obligatorio.
+- Compilación de producción (`VITE_SITE_URL=https://torneo-del-pavo.pages.dev bun run build`):
+  EJECUTADO [VERIFICADO]: `vite build` completado en 1.69 s; `dist/` ocupa **4.3 MB**;
+  confirmada existencia de `dist/_headers`, `dist/robots.txt`, `dist/sitemap.xml` y ausencia
+  de `dist/404.html`.
+- Instalación desde cero en directorio limpio (`/tmp/pavo-clean` con `bun.lock` congelado):
+  EJECUTADO [VERIFICADO]: `bun install --frozen-lockfile` instaló 520 paquetes en 2.42 s;
+  `lint` (0 errores), `test` (19/19), `build` (1.69 s) y `bun audit --audit-level=high`
+  (**0 vulnerabilidades encontradas en 565 paquetes**) pasaron sin errores.
+- Pruebas de reglas con emulador (`npm run test:rules`, 34 vectores V1–V34) y scripts
+  `seed:emulator` / `loadtest:emulator`:
+  **NO EJECUTADAS** en este contenedor porque no hay `java` instalado (`java: not found`).
+  Quedaron listas para correr automáticamente en `.github/workflows/ci.yml` (Java 17) o
+  localmente con `docker compose run --rm firestore-tests`.
+- Pruebas E2E Playwright contra emulador (`tests/e2e/app.spec.ts`):
+  **NO EJECUTADAS** contra emulador por ausencia de Java en el contenedor. Sí se realizó
+  verificación real en navegador Chromium (`playwright-cli`) contra `vite preview` (ver sección 5).
+- Lighthouse CI (`lighthouserc.json`):
+  **NO EJECUTADO** en este contenedor (sin demonio Chrome/LHCI + sin URL pública final).
+  Configurado en `.github/workflows/ci.yml` y documentado con PageSpeed Insights en
+  `docs/PRUEBA-DE-HUMO.md`.
+
+--------------------------------------------------------------------------------
+5. RESULTADOS DE 5.3.4 (CABECERAS, RUTAS PROFUNDAS Y NAVEGADOR)
+--------------------------------------------------------------------------------
+A. Verificado localmente contra build de producción en `vite preview` (`127.0.0.1:4173`):
+- `curl -I /`: `HTTP/1.1 200 OK`, `Cache-Control: no-cache`, `Content-Security-Policy` activa,
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`,
+  `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`,
+  y **SIN** `Cross-Origin-Opener-Policy: same-origin`.
+- `curl -I /assets/index-358Ims4X.js`: `HTTP/1.1 200 OK` (nota: en Cloudflare Pages tomará
+  `Cache-Control: public, max-age=31536000, immutable` desde `dist/_headers`).
+- `curl -I /admin` y `curl -I /participantes`: `HTTP/1.1 200 OK` sirviendo `index.html` (no 404).
+- Navegador Chromium (`playwright-cli` en `1440x900` y `390x844`):
+  - `/` cargó completo (cuenta regresiva, premios, sponsors, formulario) sin desbordes.
+  - `/participantes` tras `reload` (F5): cargó vista del padrón público con **0 errores y 0
+    advertencias** en consola y cero datos privados expuestos.
+  - `/admin` tras `reload` (F5): cargó pantalla de acceso con «Ingresar con Google» y **0 errores**
+    en consola bajo la CSP activa.
+
+B. Pendiente obligatorio sobre la URL real publicada en Cloudflare Pages (en `docs/PRUEBA-DE-HUMO.md`):
+- [ ] Correr `curl -I` contra la URL real `https://<proyecto>.pages.dev` para confirmar también
+      `Strict-Transport-Security`, `Cache-Control: immutable` en `/assets/*` y `X-Robots-Tag: noindex, nofollow` en `/admin`.
+- [ ] Probar login de Google en Chrome de escritorio, **Chrome móvil (Android)** y **Safari (iPhone)**
+      en datos móviles reales.
+- [ ] Inscripción real con imagen y PDF y apertura del PDF en visor bajo CSP en producción.
+- [ ] Verificar tarjeta al compartir por WhatsApp y puntajes reales de PageSpeed Insights.
+
+--------------------------------------------------------------------------------
+6. `firestore.rules` FINAL COMPLETO Y CAMBIOS RESPECTO DE LA PARTE 2
+--------------------------------------------------------------------------------
+Cambios respecto del cierre de la Parte 2:
+1. Expresiones regulares de nombre en `isValidParticipant`, `isValidPublicParticipant` y
+   `isValidWaitlistEntry`: se ampliaron de rangos latinos fijos (`a-zA-ZÁÉÍÓÚ...`) a propiedades
+   Unicode de letra (`\\p{L}`) para no rechazar apellidos con diéresis, cedilla o caracteres
+   válidos (`Chloë`, `François`, `Ïñigo`, etc.).
+2. `match /lista_espera/{esperaId}`: la creación pública ahora exige ID determinista SHA-256
+   (`esperaId is string && esperaId.matches('^[a-f0-9]{64}$')`), alineado con `submitToWaitlist`.
+*Estas reglas fueron compiladas y desplegadas a la base `ai-studio-1b982696-e484-4fe2-a9e1-54984917aae2`
+mediante `DeployRules`.*
+
+--- Contenido íntegro de `firestore.rules` (505 líneas) ---
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Denegar todo por defecto
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\.@\\-]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Sin correos hardcodeados en reglas; exige email_verified == true en todas las ramas
+    function isAdmin() {
+      return isVerifiedUser() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (
+          request.auth.token.email is string &&
+          exists(/databases/$(database)/documents/admins_by_email/$(request.auth.token.email.lower()))
+        )
+      );
+    }
+
+    function getConfig() {
+      return get(/databases/$(database)/documents/configuracion/general);
+    }
+
+    function isRegistrationOpenForConfig(cfg) {
+      return cfg != null
+        && cfg.data.inscripcionesAbiertas == true
+        && (
+          !('fechaLimiteTimestamp' in cfg.data) ||
+          (
+            cfg.data.fechaLimiteTimestamp is timestamp &&
+            request.time <= cfg.data.fechaLimiteTimestamp
+          )
+        );
+    }
+
+    function isRegistrationOpen() {
+      return isRegistrationOpenForConfig(getConfig());
+    }
+
+    function getMajorityCutoff(cfg) {
+      return (cfg != null
+        && 'fechaCorteMayoriaEdad' in cfg.data
+        && cfg.data.fechaCorteMayoriaEdad is string
+        && cfg.data.fechaCorteMayoriaEdad.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))
+        ? cfg.data.fechaCorteMayoriaEdad
+        : '2008-12-19';
+    }
+
+    function getJuvenilCutoff(cfg) {
+      return (cfg != null
+        && 'fechaCorteJuvenil' in cfg.data
+        && cfg.data.fechaCorteJuvenil is string
+        && cfg.data.fechaCorteJuvenil.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'))
+        ? cfg.data.fechaCorteJuvenil
+        : '2007-12-19';
+    }
+
+    function hasMinorConsentForConfig(data, cfg) {
+      return !(data.fechaNacimiento > getMajorityCutoff(cfg)) || (
+        'consentimientoTutor' in data && data.consentimientoTutor == true &&
+        'nombreTutor' in data && data.nombreTutor is string &&
+        data.nombreTutor.trim().size() >= 3 && data.nombreTutor.size() <= 150
+      );
+    }
+
+    function isCategoryCoherentWithAge(data, cfg) {
+      return data.categoria != 'Juvenil' || data.fechaNacimiento > getJuvenilCutoff(cfg);
+    }
+
+    function hasNoAdminAuditFields(data) {
+      return !('pagadoPor' in data)
+        && !('pagadoEn' in data)
+        && !('historial' in data)
+        && !('asistencia' in data)
+        && !('asistenciaEn' in data)
+        && !('eliminado' in data)
+        && !('eliminadoEn' in data)
+        && !('eliminadoPor' in data);
+    }
+
+    function isValidParticipant(data, isCreate) {
+      return data.keys().hasOnly([
+          'nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria',
+          'estatusPago', 'fechaRegistro', 'folio', 'esFemenil', 'esAficionado',
+          'tieneRecibo', 'reciboId', 'reciboNombreArchivo', 'notas', 'website',
+          'aceptoAviso', 'aceptoAvisoVersion', 'consentimientoTutor', 'nombreTutor',
+          'fechaConsentimiento', 'pagadoPor', 'pagadoEn', 'historial',
+          'asistencia', 'asistenciaEn', 'eliminado', 'eliminadoEn', 'eliminadoPor'
+        ])
+        && data.keys().hasAll(
+          isCreate
+            ? [
+                'nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria',
+                'estatusPago', 'fechaRegistro', 'folio', 'esFemenil', 'esAficionado'
+              ]
+            : [
+                'nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria',
+                'estatusPago', 'fechaRegistro', 'folio'
+              ]
+        )
+        && data.nombre is string && data.nombre.size() >= 3 && data.nombre.size() <= 150 && data.nombre.trim() == data.nombre
+        && (!isCreate || data.nombre.matches("^[\\p{L}][\\p{L} .'-]{1,148}[\\p{L}.]$"))
+        && data.fechaNacimiento is string && data.fechaNacimiento.matches('^(19[2-9][0-9]|20[0-9]{2})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')
+        && data.whatsapp is string && (
+          isCreate
+            ? data.whatsapp.matches('^[0-9]{10}$')
+            : data.whatsapp.matches('^[0-9+\\-\\s()]{7,20}$')
+        )
+        && data.correo is string && data.correo.size() >= 5 && data.correo.size() <= 100
+        && (!isCreate || data.correo == data.correo.lower())
+        && data.correo.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && (
+          isCreate
+            ? data.categoria in ['Juvenil', 'Libre']
+            : data.categoria in [
+                'Juvenil', 'Libre', 'Libre - Aficionados', 'Libre - Rankeado',
+                'Niños', 'Aficionados', 'Rankeado'
+              ]
+        )
+        && data.estatusPago in ['pendiente', 'pagado']
+        && data.fechaRegistro is string && data.fechaRegistro.size() >= 10 && data.fechaRegistro.size() <= 60
+        && data.folio is string && (
+          isCreate
+            ? data.folio.matches('^PAVO-[A-HJ-NP-Z2-9]{6}$')
+            : data.folio.matches('^(PAVO-[A-Z0-9]{4,10}|[A-Z0-9\\-]{4,20})$')
+        )
+        && (!('esFemenil' in data) || data.esFemenil is bool)
+        && (!('esAficionado' in data) || data.esAficionado is bool)
+        && (!isCreate || (
+          'aceptoAviso' in data && data.aceptoAviso == true &&
+          'fechaConsentimiento' in data && data.fechaConsentimiento is string &&
+          data.fechaConsentimiento.size() >= 10 && data.fechaConsentimiento.size() <= 60
+        ))
+        && (!('aceptoAviso' in data) || data.aceptoAviso is bool)
+        && (!('fechaConsentimiento' in data) || (data.fechaConsentimiento is string && data.fechaConsentimiento.size() <= 60))
+        && (!('aceptoAvisoVersion' in data) || (data.aceptoAvisoVersion is string && data.aceptoAvisoVersion.size() <= 30))
+        && (!('consentimientoTutor' in data) || data.consentimientoTutor is bool)
+        && (!('nombreTutor' in data) || (data.nombreTutor is string && data.nombreTutor.size() <= 150))
+        && (!('tieneRecibo' in data) || data.tieneRecibo is bool)
+        && (!('reciboId' in data) || (data.reciboId is string && isValidId(data.reciboId)))
+        && (!('reciboNombreArchivo' in data) || (data.reciboNombreArchivo is string && data.reciboNombreArchivo.size() <= 180))
+        && (!('tieneRecibo' in data) || data.tieneRecibo == true || (!('reciboId' in data) && !('reciboNombreArchivo' in data)))
+        && (!('notas' in data) || (data.notas is string && data.notas.size() <= 500))
+        && (!('website' in data) || data.website == '')
+        && (!('pagadoPor' in data) || (data.pagadoPor is string && data.pagadoPor.size() <= 120))
+        && (!('pagadoEn' in data) || (data.pagadoEn is string && data.pagadoEn.size() <= 60))
+        && (!('historial' in data) || (data.historial is list && data.historial.size() <= 50))
+        && (!('asistencia' in data) || data.asistencia is bool)
+        && (!('asistenciaEn' in data) || (data.asistenciaEn is string && data.asistenciaEn.size() <= 60))
+        && (!('eliminado' in data) || data.eliminado is bool)
+        && (!('eliminadoEn' in data) || (data.eliminadoEn is string && data.eliminadoEn.size() <= 60))
+        && (!('eliminadoPor' in data) || (data.eliminadoPor is string && data.eliminadoPor.size() <= 120));
+    }
+
+    function validatePublicParticipantCreateWithConfig(data, participanteId, cfg) {
+      return isRegistrationOpenForConfig(cfg)
+        && data.estatusPago == 'pendiente'
+        && data.tieneRecibo == true
+        && 'reciboId' in data
+        && !exists(/databases/$(database)/documents/comprobantes/$(data.reciboId))
+        && existsAfter(/databases/$(database)/documents/comprobantes/$(data.reciboId))
+        && getAfter(/databases/$(database)/documents/comprobantes/$(data.reciboId)).data.participantId == participanteId
+        && existsAfter(/databases/$(database)/documents/participantes_publicos/$(participanteId))
+        && (!('notas' in data) || data.notas == '')
+        && hasNoAdminAuditFields(data)
+        && hasMinorConsentForConfig(data, cfg)
+        && isCategoryCoherentWithAge(data, cfg);
+    }
+
+    function isValidPublicParticipant(data, allowAdminDigits) {
+      return data.keys().hasOnly([
+          'folio', 'nombre', 'categoria', 'esAficionado', 'esFemenil',
+          'estatusPago', 'rangoEdad', 'edad', 'fechaRegistro'
+        ])
+        && data.keys().hasAll([
+          'folio', 'nombre', 'categoria', 'esAficionado', 'esFemenil',
+          'estatusPago', 'fechaRegistro'
+        ])
+        && data.folio is string && (
+          allowAdminDigits
+            ? data.folio.matches('^(PAVO-[A-Z0-9]{4,10}|[A-Z0-9\\-]{4,20})$')
+            : data.folio.matches('^PAVO-[A-Z0-9]{4,10}$')
+        )
+        && data.nombre is string && data.nombre.size() >= 3 && data.nombre.size() <= 150 && data.nombre.trim() == data.nombre
+        && (
+          allowAdminDigits
+            ? data.nombre.matches("^[\\p{L}0-9][\\p{L}0-9 .'-]{1,148}[\\p{L}0-9.]$")
+            : data.nombre.matches("^[\\p{L}][\\p{L} .'-]{1,148}[\\p{L}.]$")
+        )
+        && data.categoria in ['Juvenil', 'Libre']
+        && data.esAficionado is bool
+        && data.esFemenil is bool
+        && data.estatusPago in ['pendiente', 'pagado']
+        && data.fechaRegistro is string && data.fechaRegistro.size() >= 10 && data.fechaRegistro.size() <= 60
+        && (!('rangoEdad' in data) || (data.rangoEdad is string && data.rangoEdad.size() <= 40))
+        && (!('edad' in data) || (
+          allowAdminDigits
+            ? (data.edad is number && data.edad >= 3 && data.edad <= 110)
+            : (data.edad is number && data.edad >= 18 && data.edad <= 110)
+        ));
+    }
+
+    function validatePublicRosterMatch(pubData, privAfter, cfg) {
+      return pubData.estatusPago == 'pendiente'
+        && pubData.folio == privAfter.data.folio
+        && pubData.categoria == privAfter.data.categoria
+        && pubData.esAficionado == privAfter.data.esAficionado
+        && pubData.esFemenil == privAfter.data.esFemenil
+        && pubData.estatusPago == privAfter.data.estatusPago
+        && pubData.fechaRegistro == privAfter.data.fechaRegistro
+        && pubData.nombre.split(' ')[0] == privAfter.data.nombre.split(' ')[0]
+        && (!(privAfter.data.fechaNacimiento > getMajorityCutoff(cfg)) || !('edad' in pubData));
+    }
+
+    function isValidWaitlistEntry(data, isCreate) {
+      return data.keys().hasOnly([
+          'nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria',
+          'esFemenil', 'esAficionado', 'estatus', 'fechaRegistro', 'folio',
+          'aceptoAviso', 'aceptoAvisoVersion', 'consentimientoTutor', 'nombreTutor',
+          'fechaConsentimiento', 'notas', 'website'
+        ])
+        && data.keys().hasAll([
+          'nombre', 'fechaNacimiento', 'whatsapp', 'correo', 'categoria',
+          'estatus', 'fechaRegistro', 'folio'
+        ])
+        && data.nombre is string && data.nombre.size() >= 3 && data.nombre.size() <= 150 && data.nombre.trim() == data.nombre
+        && (!isCreate || data.nombre.matches("^[\\p{L}][\\p{L} .'-]{1,148}[\\p{L}.]$"))
+        && data.fechaNacimiento is string && data.fechaNacimiento.matches('^(19[2-9][0-9]|20[0-9]{2})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')
+        && data.whatsapp is string && data.whatsapp.matches('^[0-9]{10}$')
+        && data.correo is string && data.correo.size() >= 5 && data.correo.size() <= 100 && data.correo == data.correo.lower() && data.correo.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && data.categoria in ['Juvenil', 'Libre']
+        && data.estatus in ['en_espera', 'contactado', 'convertido']
+        && data.fechaRegistro is string && data.fechaRegistro.size() >= 10 && data.fechaRegistro.size() <= 60
+        && data.folio is string && data.folio.matches('^ESPERA-[A-Z0-9]{4,10}$')
+        && (!('esFemenil' in data) || data.esFemenil is bool)
+        && (!('esAficionado' in data) || data.esAficionado is bool)
+        && (!isCreate || (
+          'aceptoAviso' in data && data.aceptoAviso == true &&
+          'fechaConsentimiento' in data && data.fechaConsentimiento is string &&
+          data.fechaConsentimiento.size() >= 10 && data.fechaConsentimiento.size() <= 60
+        ))
+        && (!('aceptoAviso' in data) || data.aceptoAviso is bool)
+        && (!('fechaConsentimiento' in data) || (data.fechaConsentimiento is string && data.fechaConsentimiento.size() <= 60))
+        && (!('aceptoAvisoVersion' in data) || (data.aceptoAvisoVersion is string && data.aceptoAvisoVersion.size() <= 30))
+        && (!('consentimientoTutor' in data) || data.consentimientoTutor is bool)
+        && (!('nombreTutor' in data) || (data.nombreTutor is string && data.nombreTutor.size() <= 150))
+        && (!('notas' in data) || (data.notas is string && data.notas.size() <= 500))
+        && (!('website' in data) || data.website == '');
+    }
+
+    function validatePublicWaitlistCreate(data, cfg) {
+      return isRegistrationOpenForConfig(cfg)
+        && (!('habilitarListaEspera' in cfg.data) || cfg.data.habilitarListaEspera == true)
+        && data.estatus == 'en_espera'
+        && (!('notas' in data) || data.notas == '')
+        && hasMinorConsentForConfig(data, cfg)
+        && isCategoryCoherentWithAge(data, cfg);
+    }
+
+    function isValidComprobante(data) {
+      return data.keys().hasOnly([
+          'participantId', 'folio', 'participantNombre', 'fileName',
+          'mimeType', 'fileSize', 'imageDataUrl', 'uploadedAt'
+        ])
+        && data.keys().hasAll([
+          'participantId', 'folio', 'participantNombre', 'fileName',
+          'mimeType', 'fileSize', 'imageDataUrl', 'uploadedAt'
+        ])
+        && isValidId(data.participantId)
+        && data.folio is string && data.folio.size() >= 3 && data.folio.size() <= 30
+        && data.participantNombre is string && data.participantNombre.size() >= 3 && data.participantNombre.size() <= 150
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 200 && !data.fileName.matches('.*[/\\\\].*')
+        && data.mimeType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+        && data.fileSize is number && data.fileSize >= 1 && data.fileSize <= 950000
+        && data.imageDataUrl is string && data.imageDataUrl.size() >= 30 && data.imageDataUrl.size() <= 950000
+        && (
+          (data.mimeType == 'image/jpeg' && data.imageDataUrl.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$')) ||
+          (data.mimeType == 'image/png' && data.imageDataUrl.matches('^data:image/png;base64,[A-Za-z0-9+/=]+$')) ||
+          (data.mimeType == 'image/webp' && data.imageDataUrl.matches('^data:image/webp;base64,[A-Za-z0-9+/=]+$')) ||
+          (data.mimeType == 'application/pdf' && data.imageDataUrl.matches('^data:application/pdf;base64,[A-Za-z0-9+/=]+$'))
+        )
+        && data.uploadedAt is string && data.uploadedAt.size() <= 60;
+    }
+
+    function isValidConfig(data) {
+      return data.keys().hasOnly([
+          'titulo', 'edicion', 'slogan', 'club', 'fecha', 'fechaIso', 'hora',
+          'lugar', 'referencia', 'mapaUrl', 'costo', 'cupoMaximo', 'totalInscritos',
+          'fechaLimite', 'fechaLimiteIso', 'fechaLimiteTimestamp', 'fechaCorteMayoriaEdad',
+          'fechaCorteJuvenil', 'habilitarListaEspera', 'politicaDevolucionTexto',
+          'inscripcionesAbiertas', 'clabe', 'banco', 'titular', 'whatsappContacto',
+          'bolsaPremios', 'primerLugarEfectivo', 'presidente', 'vicepresidente',
+          'premiacionTexto', 'sistemaCompetenciaTexto', 'transitoriosTexto', 'indicacionesPago'
+        ])
+        && data.keys().hasAll(['titulo', 'fecha', 'costo', 'cupoMaximo', 'inscripcionesAbiertas'])
+        && data.titulo is string && data.titulo.size() >= 3 && data.titulo.size() <= 150
+        && data.fecha is string && data.fecha.size() >= 3 && data.fecha.size() <= 100
+        && data.costo is number && data.costo >= 0 && data.costo <= 100000
+        && data.cupoMaximo is number && data.cupoMaximo >= 1 && data.cupoMaximo <= 5000
+        && data.inscripcionesAbiertas is bool
+        && (!('totalInscritos' in data) || (data.totalInscritos is number && data.totalInscritos >= 0))
+        && (!('mapaUrl' in data) || data.mapaUrl == '' || data.mapaUrl == '#' || data.mapaUrl.matches('^https://[^\\s]+$'))
+        && (!('fechaLimiteTimestamp' in data) || data.fechaLimiteTimestamp is timestamp)
+        && (!('fechaLimiteIso' in data) || (data.fechaLimiteIso is string && data.fechaLimiteIso.size() <= 60))
+        && (!('fechaCorteMayoriaEdad' in data) || (data.fechaCorteMayoriaEdad is string && data.fechaCorteMayoriaEdad.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
+        && (!('fechaCorteJuvenil' in data) || (data.fechaCorteJuvenil is string && data.fechaCorteJuvenil.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
+        && (!('habilitarListaEspera' in data) || data.habilitarListaEspera is bool)
+        && (!('politicaDevolucionTexto' in data) || (data.politicaDevolucionTexto is string && data.politicaDevolucionTexto.size() <= 2000))
+        && (!('whatsappContacto' in data) || (data.whatsappContacto is string && data.whatsappContacto.size() <= 20))
+        && (!('clabe' in data) || (data.clabe is string && data.clabe.size() <= 30));
+    }
+
+    function isValidSponsor(data) {
+      return data.keys().hasOnly(['nombre', 'logo', 'enlace', 'activo', 'orden', 'categoriaSponsor'])
+        && data.keys().hasAll(['nombre', 'logo', 'activo'])
+        && data.nombre is string && data.nombre.size() >= 1 && data.nombre.size() <= 100
+        && data.activo is bool
+        && data.logo is string && data.logo.size() <= 950000
+        && (
+          data.logo == '' ||
+          data.logo.matches('^https://[^\\s]+$') ||
+          data.logo.matches('^data:image/(jpeg|png|webp|svg\\+xml)(;base64,|;charset=UTF-8,).*$')
+        )
+        && (!('enlace' in data) || data.enlace == '' || data.enlace == '#' || data.enlace.matches('^https://[^\\s]+$'))
+        && (!('orden' in data) || data.orden is number)
+        && (!('categoriaSponsor' in data) || (data.categoriaSponsor is string && data.categoriaSponsor.size() <= 120));
+    }
+
+    function isValidAdminMember(data) {
+      return data.keys().hasOnly(['email', 'nombre', 'rol', 'agregadoEn'])
+        && data.keys().hasAll(['email', 'nombre', 'rol'])
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 120 && data.email == data.email.lower() && data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && data.nombre is string && data.nombre.size() >= 2 && data.nombre.size() <= 120
+        && data.rol is string && data.rol.size() >= 2 && data.rol.size() <= 80
+        && (!('agregadoEn' in data) || (data.agregadoEn is string && data.agregadoEn.size() <= 60));
+    }
+
+    // Colección privada de participantes (PII: correo, WhatsApp, nacimiento, reciboId, tutor)
+    match /participantes/{participanteId} {
+      allow get, list: if isAdmin();
+
+      allow create: if isValidId(participanteId)
+        && isValidParticipant(request.resource.data, true)
+        && (
+          isAdmin()
+          || validatePublicParticipantCreateWithConfig(request.resource.data, participanteId, getConfig())
+        );
+
+      allow update: if isAdmin()
+        && isValidId(participanteId)
+        && isValidParticipant(request.resource.data, false);
+
+      allow delete: if isAdmin() && isValidId(participanteId);
+    }
+
+    // Colección pública sanitizada para el padrón (cero datos de contacto, nacimiento, tutor ni recibos)
+    match /participantes_publicos/{participanteId} {
+      allow read: if true;
+
+      allow create: if isValidId(participanteId)
+        && existsAfter(/databases/$(database)/documents/participantes/$(participanteId))
+        && (
+          (isAdmin() && isValidPublicParticipant(request.resource.data, true))
+          || (
+            isValidPublicParticipant(request.resource.data, false)
+            && validatePublicRosterMatch(
+              request.resource.data,
+              getAfter(/databases/$(database)/documents/participantes/$(participanteId)),
+              getConfig()
+            )
+          )
+        );
+
+      allow update: if isAdmin()
+        && isValidId(participanteId)
+        && isValidPublicParticipant(request.resource.data, true);
+
+      allow delete: if isAdmin() && isValidId(participanteId);
+    }
+
+    // Lista de espera cuando el cupo esté agotado (solo lectura admin; escritura protegida por reglas)
+    match /lista_espera/{esperaId} {
+      allow get, list: if isAdmin();
+
+      allow create: if isValidWaitlistEntry(request.resource.data, true)
+        && (
+          (isAdmin() && isValidId(esperaId))
+          || (
+            esperaId is string
+            && esperaId.matches('^[a-f0-9]{64}$')
+            && validatePublicWaitlistCreate(request.resource.data, getConfig())
+          )
+        );
+
+      allow update: if isAdmin()
+        && isValidId(esperaId)
+        && isValidWaitlistEntry(request.resource.data, false);
+
+      allow delete: if isAdmin() && isValidId(esperaId);
+    }
+
+    // Llaves deterministas SHA-256 para evitar duplicados sin permitir enumeración
+    match /registro_llaves/{hashId} {
+      allow get, list, update: if false;
+
+      allow create: if hashId is string
+        && hashId.matches('^[a-f0-9]{64}$')
+        && request.resource.data.keys().hasOnly(['tipo', 'participantId', 'createdAt'])
+        && request.resource.data.keys().hasAll(['tipo', 'participantId', 'createdAt'])
+        && request.resource.data.tipo in ['email', 'whatsapp']
+        && isValidId(request.resource.data.participantId)
+        && request.resource.data.createdAt is string && request.resource.data.createdAt.size() <= 60
+        && (
+          isAdmin()
+          || (
+            isRegistrationOpen()
+            && !exists(/databases/$(database)/documents/participantes/$(request.resource.data.participantId))
+            && existsAfter(/databases/$(database)/documents/participantes/$(request.resource.data.participantId))
+          )
+        );
+
+      allow delete: if isAdmin() && hashId is string && hashId.matches('^[a-f0-9]{64}$');
+    }
+
+    // Bóveda privada de comprobantes (solo admin lee, actualiza o borra)
+    match /comprobantes/{comprobanteId} {
+      allow read: if isAdmin();
+
+      allow create: if isValidId(comprobanteId)
+        && isValidComprobante(request.resource.data)
+        && (
+          isAdmin()
+          || (
+            isRegistrationOpen()
+            && !exists(/databases/$(database)/documents/participantes/$(request.resource.data.participantId))
+            && existsAfter(/databases/$(database)/documents/participantes/$(request.resource.data.participantId))
+            && getAfter(/databases/$(database)/documents/participantes/$(request.resource.data.participantId)).data.reciboId == comprobanteId
+            && getAfter(/databases/$(database)/documents/participantes/$(request.resource.data.participantId)).data.folio == request.resource.data.folio
+          )
+        );
+
+      allow update: if isAdmin()
+        && isValidId(comprobanteId)
+        && isValidComprobante(request.resource.data);
+
+      allow delete: if isAdmin() && isValidId(comprobanteId);
+    }
+
+    // Configuración del torneo (Opción A: sin escritura pública a totalInscritos)
+    match /configuracion/{configId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(configId) && isValidConfig(request.resource.data);
+      allow delete: if isAdmin() && isValidId(configId);
+    }
+
+    // Patrocinadores
+    match /patrocinadores/{patrocinadorId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(patrocinadorId) && isValidSponsor(request.resource.data);
+      allow delete: if isAdmin() && isValidId(patrocinadorId);
+    }
+
+    // Administradores por UID y por correo normalizado
+    match /admins/{adminId} {
+      allow get: if isVerifiedUser() && (request.auth.uid == adminId || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(adminId) && isValidAdminMember(request.resource.data);
+      allow delete: if isAdmin() && isValidId(adminId);
+    }
+
+    match /admins_by_email/{emailId} {
+      allow get: if isVerifiedUser() && (
+        (request.auth.token.email is string && request.auth.token.email.lower() == emailId) ||
+        isAdmin()
+      );
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && isValidId(emailId)
+        && emailId == emailId.lower()
+        && isValidAdminMember(request.resource.data)
+        && request.resource.data.email == emailId;
+      allow delete: if isAdmin() && isValidId(emailId);
+    }
+
+    // Documento único de comprobación de conectividad
+    match /test/{docId} {
+      allow get: if docId == 'connection';
+      allow list, write: if false;
+    }
+  }
+}
+
+--------------------------------------------------------------------------------
+7. RIESGOS RESIDUALES ACEPTADOS
+--------------------------------------------------------------------------------
+| Riesgo | Impacto | Mitigación implementada | Quién decide |
+|---|---|---|---|
+| Creación automática de basura en `/lista_espera` sin App Check activo | Alto (llenar lista de espera) | ID determinista SHA-256 por correo + botón «Vaciar convertidos / antiguos» + App Check | Organizador (activar App Check Enforcement) |
+| Lecturas repetidas en `/participantes` si hay pico inusual (> 50k/día) | Medio (corte diario Spark sin costo) | Límite 500 docs, caché 60s, pausa en segundo plano, plan de PDF por WhatsApp | Organizador |
+| Datos de pago públicos en `/configuracion` | Bajo (necesario para depósitos) | Aviso explícito + restricción de escritura solo admin + validación anti-ejemplos | Organizador |
+| Un usuario escribe manualmente otro correo con variaciones para saltarse unicidad | Bajo | `/registro_llaves` SHA-256 por correo y WhatsApp + filtro «Posibles duplicados» en admin | Organizador |
+| Falta de ejecución en vivo de reglas/E2E antes de subir a GitHub | Alto hasta correr CI | Workflow `.github/workflows/ci.yml` listo con Java 17 y emulador | Organizador / quien suba el repo a GitHub |
+
+--------------------------------------------------------------------------------
+8. LISTA GO / NO-GO DE LANZAMIENTO (RESUMEN)
+--------------------------------------------------------------------------------
+[ ] CI en verde en GitHub Actions en rama `main` (incluyendo V1–V34, E2E y Lighthouse).
+[ ] Al menos 1–2 administradores cargados en `admins_by_email` en la base con nombre.
+[ ] Reglas de Firestore verificadas visualmente en Firebase Console.
+[ ] Sitio publicado en Cloudflare Pages con `VITE_SITE_URL` definitiva y `VITE_APP_ENV=production`.
+[ ] Dominios actualizados en Firebase Auth, reCAPTCHA Enterprise y restricción HTTP API key.
+[ ] CLABE, banco, titular y WhatsApp reales guardados en `/admin → Convocatoria`.
+[ ] App Check comprobado con tráfico verde y luego puesto en *Enforcement*.
+[ ] Auth restringida únicamente a Google.
+[ ] Las 10 comprobaciones de `docs/PRUEBA-DE-HUMO.md` pasadas (incluyendo datos móviles y Safari/Chrome móvil) y registros de prueba eliminados definitivamente.
+
+--------------------------------------------------------------------------------
+9. PASOS MANUALES EN ORDEN (RESUMEN DE `docs/PASOS-MANUALES.md`)
+--------------------------------------------------------------------------------
+1. Crear al primer administrador en Firestore (`admins_by_email`) en la base `ai-studio-1b982696-e484-4fe2-a9e1-54984917aae2`.
+2. Capturar datos bancarios reales (CLABE, banco, titular, WhatsApp) y confirmar fechas en `/admin → Convocatoria`.
+3. Publicar y comprobar visualmente `firestore.rules` en Firebase Console sobre la base con nombre.
+4. Crear repositorio privado en GitHub, subir el código, activar CI y conectar Cloudflare Pages (`bun install --frozen-lockfile && bun run build`, salida `dist`). Actualizar `VITE_SITE_URL` tras obtener la URL y redeploy.
+5. Actualizar dominios en Firebase Auth (y quitar `ais-dev-*`/`ais-pre-*`), reCAPTCHA Enterprise y restricción HTTP de API key.
+6. En `/admin`, presionar **Sincronizar padrón** si existían registros previos.
+7. Publicar con llave reCAPTCHA, comprobar tráfico verificado en App Check y **solo después** activar *Enforcement*.
+8. Desactivar proveedores no usados en Firebase Auth (dejar solo Google).
+9. Ejecutar la prueba de humo completa (`docs/PRUEBA-DE-HUMO.md`) y eliminar los registros de prueba.
+10. Anunciar oficialmente el torneo.
+
+--------------------------------------------------------------------------------
+10. DECISIONES PENDIENTES DEL ORGANIZADOR
+--------------------------------------------------------------------------------
+1. Privacidad en el padrón público (`/participantes`): ¿mantener nombres abreviados («Nombre Apellido P.») como está configurado actualmente, o mostrar nombres completos?
+2. Lista de espera al agotar cupo de 100 jugadores: ¿dejarla activa como viene por defecto o desactivarla en *Convocatoria*?
+3. Política final de devoluciones/cancelaciones y plazo exacto de retención (máximo 30 días recomendado): revisar y publicar el borrador en *Convocatoria → Política de Devolución*.
+4. Formato de exportación para el emparejamiento suizo (`Suizo` CSV actual vs. columnas específicas requeridas por el árbitro en Swiss-Manager/Vega).
+5. Dominio propio (ej. `torneodelpavo.org` / `.mx`) vs. subdominio gratuito `*.pages.dev` de Cloudflare.
+6. Modo de despliegue en Cloudflare Pages: integración Git nativa con rama `main` protegida (recomendado) o despliegue manual desde GitHub Actions con token Wrangler.
+
+--------------------------------------------------------------------------------
+11. LO QUE NO SE PUDO HACER EN ESTE CONTENEDOR (CON PRIORIDAD SUGERIDA)
+--------------------------------------------------------------------------------
+1. [PRIORIDAD CRÍTICA] Ejecutar `npm run test:rules` (34 vectores V1–V34), `seed:emulator`, `loadtest:emulator` y `test:e2e` contra el emulador de Firestore/Auth: bloqueado por ausencia de `java` en el entorno (`java: not found`). Se mitiga subiendo el proyecto a GitHub para que `.github/workflows/ci.yml` los ejecute con Java 17, o corriendo `docker compose run --rm firestore-tests`.
+2. [PRIORIDAD ALTA] Verificar en vivo el workflow de GitHub Actions y revisar historial Git (`.git`): el espacio de trabajo no cuenta con repositorio `.git` ni conexión a GitHub. Se realizó búsqueda directa de secretos y URLs antiguas sobre todos los archivos del workspace sin hallazgos activos.
+3. [PRIORIDAD ALTA] Publicar en Cloudflare Pages, correr `curl -I` sobre la URL pública real, correr PageSpeed Insights/Lighthouse real y probar login con Google en Safari de iPhone y Chrome móvil con datos celulares reales.
+4. [PRIORIDAD MEDIA] Verificar visualmente en Firebase Console las reglas desplegadas, dar de alta al primer admin en `admins_by_email` y activar App Check tras comprobar solicitudes verificadas.
+================================================================================

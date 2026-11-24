@@ -7,6 +7,7 @@ interface NavbarProps {
   onGoHome?: () => void;
   currentView?: 'home' | 'participantes';
   placesLeft?: number;
+  isCountLoading?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -15,6 +16,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onGoHome,
   currentView = 'home',
   placesLeft,
+  isCountLoading = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -25,6 +27,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { name: 'Bases & Sistema', href: '#reglas', icon: HelpCircle },
     { name: 'Premiación', href: '#premiacion', icon: Award },
     { name: 'Patrocinadores', href: '#patrocinadores', icon: Users },
+    { name: 'FAQ', href: '#faq', icon: HelpCircle },
     { name: 'Contacto', href: '#contacto', icon: PhoneCall },
   ];
 
@@ -33,10 +36,10 @@ export const Navbar: React.FC<NavbarProps> = ({
     setIsOpen(false);
     if (currentView === 'participantes' && onGoHome) {
       onGoHome();
-      setTimeout(() => {
+      window.setTimeout(() => {
         const target = document.querySelector(href);
         if (target) target.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      }, 120);
       return;
     }
     const target = document.querySelector(href);
@@ -59,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center gap-2 group cursor-pointer"
           >
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-emerald-950 font-black text-xl shadow-md border border-amber-300 group-hover:scale-105 transition-transform">
-              🦃
+              <span aria-hidden="true">🦃</span>
             </div>
             <div>
               <span className="font-festive text-lg sm:text-xl font-bold tracking-wide text-amber-300 drop-shadow block leading-tight">
@@ -72,7 +75,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           </a>
 
           {/* Desktop Nav */}
-          <nav className="hidden lg:flex items-center gap-1 xl:gap-2 text-sm font-medium text-emerald-100">
+          <nav
+            aria-label="Navegación principal"
+            className="hidden lg:flex items-center gap-1 xl:gap-1.5 text-sm font-medium text-emerald-100"
+          >
             {navLinks.map((link) => (
               <a
                 key={link.name}
@@ -84,10 +90,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               </a>
             ))}
 
-            {/* Direct Participants View Link */}
             <button
+              type="button"
               onClick={onViewParticipants}
-              className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow ${
+              className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow cursor-pointer ${
                 currentView === 'participantes'
                   ? 'bg-amber-400 text-emerald-950 shadow-md'
                   : 'bg-emerald-900/90 text-amber-300 hover:bg-amber-400 hover:text-emerald-950 border border-amber-400/40'
@@ -100,15 +106,20 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Actions */}
           <div className="hidden sm:flex items-center gap-2.5">
-            {placesLeft !== undefined && (
-              <span className="hidden xl:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/80 text-amber-300 border border-emerald-600/40">
-                {placesLeft} disp.
+            {isCountLoading ? (
+              <span className="hidden xl:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/60 text-emerald-300 border border-emerald-700/40">
+                Consultando cupo...
               </span>
-            )}
+            ) : placesLeft !== undefined ? (
+              <span className="hidden xl:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/80 text-amber-300 border border-emerald-600/40">
+                {placesLeft > 0 ? `${placesLeft} disp.` : 'Cupo lleno'}
+              </span>
+            ) : null}
 
             <button
+              type="button"
               onClick={onViewParticipants}
-              className="lg:hidden bg-emerald-900/90 text-amber-300 font-bold px-3 py-1.5 rounded-xl text-xs border border-amber-400/40 flex items-center gap-1"
+              className="lg:hidden bg-emerald-900/90 text-amber-300 font-bold px-3 py-1.5 rounded-xl text-xs border border-amber-400/40 flex items-center gap-1 cursor-pointer"
             >
               <Users size={14} />
               <span>Padrón</span>
@@ -120,13 +131,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-emerald-950 font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-md transition-all transform active:scale-95 flex items-center gap-1.5"
             >
               <span>¡Inscríbete!</span>
-              <span>♟</span>
+              <span aria-hidden="true">♟</span>
             </a>
 
             <button
+              type="button"
               onClick={onOpenAdmin}
+              aria-label="Abrir panel de administración"
               title="Panel de Administración"
-              className="p-2 text-emerald-300 hover:text-amber-300 hover:bg-emerald-800/40 rounded-lg transition-colors border border-transparent hover:border-emerald-700"
+              className="p-2 text-emerald-300 hover:text-amber-300 hover:bg-emerald-800/40 rounded-lg transition-colors border border-transparent hover:border-emerald-700 cursor-pointer"
             >
               <Shield size={18} />
             </button>
@@ -135,16 +148,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Mobile Menu Button */}
           <div className="flex sm:hidden items-center gap-2">
             <button
+              type="button"
               onClick={onOpenAdmin}
+              aria-label="Abrir panel de administración"
               title="Panel Admin"
-              className="p-2 text-emerald-300 hover:text-amber-300"
+              className="p-2 text-emerald-300 hover:text-amber-300 cursor-pointer"
             >
               <Shield size={20} />
             </button>
             <button
+              type="button"
               onClick={() => setIsOpen(!isOpen)}
-              className="p-2 rounded-lg text-emerald-200 hover:text-white hover:bg-emerald-800/60 focus:outline-none"
-              aria-label="Abrir menú"
+              className="p-2 rounded-lg text-emerald-200 hover:text-white hover:bg-emerald-800/60 cursor-pointer"
+              aria-label={isOpen ? 'Cerrar menú de navegación' : 'Abrir menú de navegación'}
+              aria-expanded={isOpen}
             >
               {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -154,7 +171,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Drawer */}
       {isOpen && (
-        <div className="lg:hidden bg-[#0a2f1c] border-b border-emerald-700/60 px-4 pt-2 pb-6 space-y-2 shadow-2xl">
+        <nav
+          aria-label="Navegación móvil"
+          className="lg:hidden bg-[#0a2f1c] border-b border-emerald-700/60 px-4 pt-2 pb-6 space-y-2 shadow-2xl"
+        >
           {navLinks.map((link) => {
             const Icon = link.icon;
             return (
@@ -171,11 +191,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
           <div className="pt-3 border-t border-emerald-800/60 flex flex-col gap-2">
             <button
+              type="button"
               onClick={() => {
                 setIsOpen(false);
                 onViewParticipants();
               }}
-              className="w-full text-center bg-emerald-900/90 text-amber-300 font-bold py-2.5 rounded-xl text-sm border border-amber-400/50 flex items-center justify-center gap-2 shadow"
+              className="w-full text-center bg-emerald-900/90 text-amber-300 font-bold py-2.5 rounded-xl text-sm border border-amber-400/50 flex items-center justify-center gap-2 shadow cursor-pointer"
             >
               <Users size={16} />
               <span>Ver Lista de Participantes Registrados</span>
@@ -188,7 +209,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               ¡Regístrate al Torneo! ♟
             </a>
           </div>
-        </div>
+        </nav>
       )}
     </header>
   );

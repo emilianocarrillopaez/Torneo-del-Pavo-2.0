@@ -1,12 +1,12 @@
 import React from 'react';
-import { Clock, Shield, Award, Users, AlertTriangle, CheckSquare } from 'lucide-react';
+import { Clock, Shield, Award, Users, AlertTriangle } from 'lucide-react';
 import { TournamentConfig } from '../types/tournament';
 
 interface RulesSectionProps {
   config: TournamentConfig;
 }
 
-export const RulesSection: React.FC<RulesSectionProps> = ({ config }) => {
+export const RulesSection: React.FC<RulesSectionProps> = ({ config: _config }) => {
   const tieBreakers = [
     { rank: '1°', name: 'Puntos Acumulados', desc: 'Suma total de puntos obtenidos en las 5 rondas (1 pt victoria, 0.5 pt tablas).' },
     { rank: '2°', name: 'Bucholtz Total', desc: 'Suma de los puntos obtenidos por todos los rivales enfrentados.' },

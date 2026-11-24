@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "yogic-decoder-5lxdt",
+    "production": "yogic-decoder-5lxdt",
+    "staging": "torneo-pavo-staging-reemplazar"
+  }
+}

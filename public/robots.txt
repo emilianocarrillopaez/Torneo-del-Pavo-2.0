@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Allow: /participantes
+Disallow: /admin
+Sitemap: https://torneo-del-pavo.pages.dev/sitemap.xml

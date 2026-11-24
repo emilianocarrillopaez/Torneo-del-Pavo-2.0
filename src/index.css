@@ -90,3 +90,39 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #ca8a04;
 }
+
+/* Accesibilidad: foco visible claro sobre fondo oscuro */
+:focus-visible {
+  outline: 2px solid #facc15;
+  outline-offset: 2px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Respetar preferencia del sistema por movimiento reducido (WCAG 2.1 AA) */
+@media (prefers-reduced-motion: reduce) {
+  .snowflake,
+  .light-bulb,
+  .animate-pulse,
+  .animate-bounce,
+  .animate-fadeIn {
+    animation: none !important;
+    transition: none !important;
+  }
+  html {
+    scroll-behavior: auto !important;
+  }
+}
