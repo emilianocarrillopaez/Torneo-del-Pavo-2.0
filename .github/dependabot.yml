@@ -7,10 +7,12 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "America/Monterrey"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     groups:
-      dev-dependencies:
-        dependency-type: "development"
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -19,3 +21,8 @@ updates:
       time: "09:00"
       timezone: "America/Monterrey"
     open-pull-requests-limit: 3
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"

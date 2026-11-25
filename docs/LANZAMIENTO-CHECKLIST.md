@@ -9,7 +9,7 @@ Las fechas siguientes son referencias operativas relativas al día del torneo (`
 
 - [ ] **Primer administrador creado** en Firestore (`admins_by_email`) en la base `ai-studio-1b982696-e484-4fe2-a9e1-54984917aae2`.
 - [ ] **Reglas de Firestore publicadas y verificadas visualmente** en Firebase Console comparando con `firestore.rules`.
-- [ ] **Sitio publicado en Cloudflare Pages** con `VITE_SITE_URL` definitiva y `VITE_APP_ENV=production`.
+- [ ] **Sitio publicado en Cloudflare Workers (`torneo-del-pavo-2-0`)** con `VITE_SITE_URL` definitiva y `VITE_APP_ENV=production`.
 - [ ] **Dominios actualizados** en Firebase Auth, reCAPTCHA Enterprise y restricción HTTP de la API Key Web.
 - [ ] **Datos bancarios reales capturados** en `/admin → Convocatoria` (CLABE, banco, titular y WhatsApp sin valores `000000...`).
 - [ ] **App Check verificado y activado (*Enforced*)** en Cloud Firestore tras comprobar tráfico verde legítimo.

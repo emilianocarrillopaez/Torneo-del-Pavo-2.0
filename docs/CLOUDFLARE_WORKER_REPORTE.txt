@@ -1,0 +1,257 @@
+================================================================================
+TORNEO DEL PAVO 2.0 · CLUB DE AJEDREZ DON GONZALO (DURANGO, DGO.)
+REPORTE DE AJUSTES PARA CLOUDFLARE WORKERS (STATIC ASSETS) Y CI (A–F)
+Fecha: 25 de noviembre de 2026
+================================================================================
+
+NOTA SOBRE LA URL DEL SITIO:
+En «Datos del organizador», el marcador `PEGA_AQUI_TU_URL` seguía sin
+reemplazarse por una URL `.workers.dev` real. Conforme a las instrucciones
+recibidas, NO se reemplazó la URL de respaldo (`https://torneo-del-pavo.pages.dev`)
+en `scripts/site-config.mjs`, `.env.example`, `.github/workflows/ci.yml` ni en
+la documentación existente.
+
+--------------------------------------------------------------------------------
+1. TABLA RESUMEN DE AJUSTES (A–F)
+--------------------------------------------------------------------------------
+Punto | Archivos creados / modificados                              | Estado
+------|-------------------------------------------------------------|---------------------------
+A     | wrangler.jsonc (nuevo), verificación de dist/_headers       | Corregido y verificado
+------|-------------------------------------------------------------|---------------------------
+B     | scripts/check-wrangler-config.mjs (nuevo), package.json     | Corregido y verificado
+      | (check:wrangler + wrangler@4.168.0 en devDependencies),     | (audit limpio: 0 vulns;
+      | bun.lock, src/utils/tournamentUtils.test.ts (#21),          | dry-run sin credenciales)
+      | .github/workflows/ci.yml                                    |
+------|-------------------------------------------------------------|---------------------------
+C     | .github/workflows/ci.yml (Java 21 y textos "Cloudflare"),   | Corregido y verificado
+      | scripts/run-rules-tests.mjs (parseJavaMajorVersion + check  | en unitarias y script;
+      | Java >= 21), src/utils/tournamentUtils.test.ts (#22),       | emulador NO verificado
+      | docker-compose.yml (verificado ya con Java 21), README.md,  | (sin Java 21 en contenedor)
+      | docs/AUDITORIA.md, docs/PARTE_1_REPORTE.txt,                |
+      | docs/PARTE_2_REPORTE.txt, docs/PARTE_3_REPORTE.txt          |
+------|-------------------------------------------------------------|---------------------------
+D     | .github/dependabot.yml ("bun", límite 3 PRs/semana, grupo   | Corregido en archivos
+      | minor-and-patch), README.md (nota CI verde + bun.lock)      | (GitHub remoto NO verificado)
+------|-------------------------------------------------------------|---------------------------
+E     | scripts/generate-seo-files.mjs (soporte WORKERS_CI=1);      | Sin cambio de URL (siguió
+      | pruebas reales de build con/sin VITE_SITE_URL               | PEGA_AQUI_TU_URL); builds
+      |                                                             | ejecutados y verificados
+------|-------------------------------------------------------------|---------------------------
+F     | docs/DESPLIEGUE-CLOUDFLARE.md (reescrito para Workers),     | Corregido en docs
+      | README.md, SECURITY.md, docs/PASOS-MANUALES.md,             | (despliegue real en
+      | docs/PRUEBA-DE-HUMO.md, docs/LANZAMIENTO-CHECKLIST.md,      | Cloudflare NO verificado)
+      | docs/RUNBOOK-INCIDENTES.md, docs/AUDITORIA.md,              |
+      | docs/GUIA-ADMIN.md                                          |
+
+Nota sobre limpieza de adjunto temporal:
+- Se eliminó `/public/assets/aistudio/` tras leer el prompt adjunto para mantener
+  íntegro el bloqueo prebuild de archivos internos dentro de `public/`.
+- `docs/PLAN-DE-CAPACIDAD.md` sigue citando cuotas de «Cloudflare Pages Free»
+  porque describe límites oficiales históricos verificados el 24/11/2026; no se
+  modificó al no haber cuotas nuevas medidas para Workers aquí.
+
+--------------------------------------------------------------------------------
+2. SALIDAS REALES DE EJECUCIÓN EN ESTE ENTORNO
+--------------------------------------------------------------------------------
+
+--- bun run lint ---
+$ tsc --noEmit && eslint .
+
+/app/applet/firestore.rules
+  371:7  warning  Insecure open read rule detected. Warn on open reads in production  @firebase/security-rules/no-open-reads
+  464:7  warning  Insecure open read rule detected. Warn on open reads in production  @firebase/security-rules/no-open-reads
+  471:7  warning  Insecure open read rule detected. Warn on open reads in production  @firebase/security-rules/no-open-reads
+
+✖ 3 problems (0 errors, 3 warnings)
+
+--- bun run test ---
+$ tsx --test src/utils/tournamentUtils.test.ts
+TAP version 13
+# Subtest: computeCountdown calculates exact remaining days, hours, minutes, and seconds
+ok 1 - computeCountdown calculates exact remaining days, hours, minutes, and seconds
+# Subtest: computeCountdown handles elapsed event dates and invalid dates safely
+ok 2 - computeCountdown handles elapsed event dates and invalid dates safely
+# Subtest: shuffleArray preserves all items without mutating original array
+ok 3 - shuffleArray preserves all items without mutating original array
+# Subtest: calculateAgeAtTournament handles exact birthday boundaries and leap year Feb 29
+ok 4 - calculateAgeAtTournament handles exact birthday boundaries and leap year Feb 29
+# Subtest: deriveAgeCutoffs derives dynamic legal and Juvenil cutoffs from fechaIso
+ok 5 - deriveAgeCutoffs derives dynamic legal and Juvenil cutoffs from fechaIso
+# Subtest: toPublicParticipantPayload omits exact age for minors and keeps only range
+ok 6 - toPublicParticipantPayload omits exact age for minors and keeps only range
+# Subtest: validateRegistrationInput enforces receipt, privacy notice, age coherence, future dates, and minor tutor consent
+ok 7 - validateRegistrationInput enforces receipt, privacy notice, age coherence, future dates, and minor tutor consent
+# Subtest: isPlaceholderPaymentConfig detects missing or example payment data reliably
+ok 8 - isPlaceholderPaymentConfig detects missing or example payment data reliably
+# Subtest: validateReceiptFileMeta rejects unsupported mime types and oversized files
+ok 9 - validateReceiptFileMeta rejects unsupported mime types and oversized files
+# Subtest: receiptUtils validates magic bytes, safe data URLs, and file names
+ok 10 - receiptUtils validates magic bytes, safe data URLs, and file names
+# Subtest: generateSecureFolio produces unpredictable 6-char folios
+ok 11 - generateSecureFolio produces unpredictable 6-char folios
+# Subtest: safeHttpUrl and formatWhatsAppUrl block dangerous URL protocols
+ok 12 - safeHttpUrl and formatWhatsAppUrl block dangerous URL protocols
+# Subtest: sanitizeSpreadsheetCell neutralizes formula injection prefixes
+ok 13 - sanitizeSpreadsheetCell neutralizes formula injection prefixes
+# Subtest: sha256Hex and normalization helpers create deterministic duplicate hashes
+ok 14 - sha256Hex and normalization helpers create deterministic duplicate hashes
+# Subtest: findPossibleDuplicates flags matching email, phone, or fuzzy accent-insensitive name
+ok 15 - findPossibleDuplicates flags matching email, phone, or fuzzy accent-insensitive name
+# Subtest: public vs admin exports and Swiss pairing export isolate PII properly
+ok 16 - public vs admin exports and Swiss pairing export isolate PII properly
+# Subtest: classifyAndFormatError returns actionable Spanish messages without leaking internal codes
+ok 17 - classifyAndFormatError returns actionable Spanish messages without leaking internal codes
+# Subtest: buildParticipantNames & validateRegistrationInput handle compound names, particles, apostrophes, hyphens, accents, and umlauts consistently
+ok 18 - buildParticipantNames & validateRegistrationInput handle compound names, particles, apostrophes, hyphens, accents, and umlauts consistently
+# Subtest: security-headers single source of truth enforces Cloudflare Pages limits and safe CSP rules
+ok 19 - security-headers single source of truth enforces Cloudflare Pages limits and safe CSP rules
+# Subtest: generate-seo-files blocks forbidden internal files in public/ and excludes /participantes from robots/sitemap
+ok 20 - generate-seo-files blocks forbidden internal files in public/ and excludes /participantes from robots/sitemap
+# Subtest: check-wrangler-config validates valid wrangler.jsonc (with comments) and rejects every invalid configuration
+ok 21 - check-wrangler-config validates valid wrangler.jsonc (with comments) and rejects every invalid configuration
+# Subtest: parseJavaMajorVersion parses Java 8, 17, 21+, and invalid outputs accurately
+ok 22 - parseJavaMajorVersion parses Java 8, 17, 21+, and invalid outputs accurately
+1..22
+# tests 22
+# suites 0
+# pass 22
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 558.726391
+
+--- VITE_SITE_URL=https://torneo-del-pavo.pages.dev bun run build ---
+$ node scripts/generate-seo-files.mjs
+✅ SEO y cabeceras generados para https://torneo-del-pavo.pages.dev (public/_headers, robots.txt, sitemap.xml)
+$ vite build
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 2330 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     4.69 kB │ gzip:   1.59 kB
+dist/assets/index-8N9747uR.css                     98.07 kB │ gzip:  13.66 kB
+dist/assets/rolldown-runtime-BCiCTKAo.js            1.30 kB │ gzip:   0.71 kB
+dist/assets/purify.es-Dzkdzyfv.js                  28.50 kB │ gzip:  11.42 kB
+dist/assets/jspdf.plugin.autotable-2eOJeXl-.js     30.30 kB │ gzip:   9.65 kB
+dist/assets/index.es-NQ3yJ1ab.js                  151.41 kB │ gzip:  48.91 kB
+dist/assets/AdminPanel-BKYdZt6H.js                173.07 kB │ gzip:  29.80 kB
+dist/assets/html2canvas-DgyG5QR-.js               199.40 kB │ gzip:  46.74 kB
+dist/assets/jspdf.es.min-DOlymkJp.js              399.68 kB │ gzip: 129.91 kB
+dist/assets/exceljs.min-CDmtrTPY.js               929.38 kB │ gzip: 256.38 kB
+dist/assets/index-B_atv_uI.js                   1,480.27 kB │ gzip: 428.12 kB
+✓ built in 1.73s
+(Verificado además que `dist/_headers` existe: -rw-r--r-- 1 root root 1675 dist/_headers)
+
+--- Compilación SIN VITE_SITE_URL (Punto E) ---
+Caso 1 — Local / contenedor sin CI (`env -u VITE_SITE_URL -u APPLET_ID bun run build`):
+  ⚠️  VITE_SITE_URL no definida; usando URL canónica por defecto https://torneo-del-pavo.pages.dev.
+  ✅ SEO y cabeceras generados para https://torneo-del-pavo.pages.dev (public/_headers, robots.txt, sitemap.xml)
+  ✓ built in 1.57s (permite arranque local y Cloud Run `vite preview`).
+Caso 2 — Entorno estricto de Cloudflare Workers Builds / GitHub CI (`WORKERS_CI=1 env -u VITE_SITE_URL bun run build`):
+  Error: ❌ Error de compilación: VITE_SITE_URL no está definida. Configúrala en Cloudflare / GitHub Actions / .env (ej. VITE_SITE_URL=https://torneo-del-pavo.pages.dev) antes de compilar producción.
+  error: script "prebuild" exited with code 1 (aborta el despliegue si falta la Build Variable).
+
+--- bun run check:wrangler ---
+$ node scripts/check-wrangler-config.mjs
+✅ Configuración Wrangler válida (name=torneo-del-pavo-2-0, assets.directory=./dist, not_found_handling=single-page-application)
+
+--- wrangler deploy --dry-run (sin credenciales Cloudflare) ---
+ ⛅️ wrangler 4.168.0
+────────────────────
+✨ Read 24 files from the assets directory /app/applet/dist
+Total Upload: 0.31 KiB / gzip: 0.22 KiB
+No bindings found.
+--dry-run: exiting now.
+
+--- bun audit --audit-level=high ---
+bun audit v1.4.4 (38afee6c8)
+No vulnerabilities found (checked 988 packages, 3 below --audit-level=high) [94.00ms]
+
+--- npm run test:rules (verificación de Java 21) ---
+> node scripts/run-rules-tests.mjs
+❌ Se requiere Java 21 o superior para el emulador de Firestore (no se encontró `java`; ver README.md y docs/PASOS-MANUALES.md).
+
+--------------------------------------------------------------------------------
+3. CONTENIDO FINAL DE wrangler.jsonc Y TRABAJOS MODIFICADOS EN ci.yml
+--------------------------------------------------------------------------------
+
+--- wrangler.jsonc ---
+{
+  "name": "torneo-del-pavo-2-0",
+  "compatibility_date": "2026-11-25",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
+
+--- .github/workflows/ci.yml (pasos/trabajos modificados) ---
+      - name: Compilar producción para Cloudflare
+        env:
+          VITE_SITE_URL: ${{ vars.VITE_SITE_URL || 'https://torneo-del-pavo.pages.dev' }}
+          VITE_APP_ENV: production
+          STRICT_SITE_URL: '1'
+        run: bun run build
+
+      - name: Validar artefactos generados para Cloudflare
+        run: |
+          test -f dist/_headers
+          test -f dist/robots.txt
+          test -f dist/sitemap.xml
+          test -f dist/img/cartel-2026.webp
+          test ! -e dist/404.html
+          test ! -d dist/assets/aistudio
+
+      - name: Verificar configuración Wrangler y empaque estático (dry-run)
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          bun run check:wrangler
+          ./node_modules/.bin/wrangler deploy --dry-run
+
+  firestore-rules:
+    name: Pruebas de Reglas Firestore (Emulador)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4.2.2
+      - name: Configurar Node.js 22
+        uses: actions/setup-node@v4.3.0
+        with:
+          node-version: '22.23.5'
+      - name: Configurar Bun
+        uses: oven-sh/setup-bun@v2.0.2
+        with:
+          bun-version: '1.4.4'
+      - name: Configurar Java 21 para Firestore Emulator
+        uses: actions/setup-java@v4.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Instalar dependencias con lockfile congelado
+        run: bun install --frozen-lockfile
+      - name: Ejecutar suite de reglas contra emulador (V1–V34)
+        run: npm run test:rules
+
+  e2e-and-lighthouse:
+    ...
+      - name: Configurar Java 21 para Emuladores Firebase
+        uses: actions/setup-java@v4.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+--------------------------------------------------------------------------------
+4. QUÉ NO SE PUDO VERIFICAR EN ESTE ENTORNO
+--------------------------------------------------------------------------------
+1. Emulador de Firestore / Auth (`npm run test:rules` y `bun run test:e2e`):
+   No verificado porque el contenedor no tiene Java 21 instalado.
+2. GitHub Actions y Dependabot (`bun` en `.github/dependabot.yml`):
+   No verificados en vivo hasta subir el repositorio privado a GitHub.
+3. Despliegue real en Cloudflare Workers (`torneo-del-pavo-2-0`):
+   No verificado con cuenta real ni URL `.workers.dev` activa; además, la URL
+   pública siguió con el marcador `PEGA_AQUI_TU_URL`, por lo que queda pendiente
+   capturar la URL `.workers.dev` definitiva en *Build Variables* (`VITE_SITE_URL`)
+   y en Firebase Auth / reCAPTCHA Enterprise / API Key.

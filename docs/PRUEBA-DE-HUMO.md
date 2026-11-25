@@ -1,6 +1,6 @@
 # Prueba de Humo en Producción — Torneo del Pavo 2.0
 
-Ejecuta esta lista **después** de haber completado los pasos 1 a 8 de [`docs/PASOS-MANUALES.md`](PASOS-MANUALES.md), directamente sobre la **URL definitiva publicada en Cloudflare Pages**.
+Ejecuta esta lista **después** de haber completado los pasos 1 a 8 de [`docs/PASOS-MANUALES.md`](PASOS-MANUALES.md), directamente sobre la **URL definitiva publicada en Cloudflare Workers**.
 
 > **Importante:** al terminar la prueba de humo y antes de anunciar el torneo, elimina definitivamente los registros ficticios creados en estas pruebas.
 

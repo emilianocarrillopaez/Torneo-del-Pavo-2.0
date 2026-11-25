@@ -4,14 +4,14 @@
 **Fecha de corte (Parte 3 — Final):** 2026-11-24
 **Proyecto Firebase:** `yogic-decoder-5lxdt`
 **Base de datos Firestore:** `ai-studio-1b982696-e484-4fe2-a9e1-54984917aae2`
-**Hosting estático definitivo:** **Cloudflare Pages** (plan gratuito). Firebase Hosting quedó retirado de `firebase.json` y guías.
+**Hosting estático definitivo:** **Cloudflare Workers (Static Assets)** (plan gratuito, `wrangler.jsonc`). Firebase Hosting quedó retirado de `firebase.json` y guías.
 
 ---
 
 ## 1. Línea Base y Auditoría de Dependencias (Verificación 3.5)
 
 - **Entorno verificado:** `node v22.23.5` (`.node-version`), `bun 1.4.4`, `firebase-tools 15.36.0`. Único lockfile: `bun.lock`.
-- **Java / Emulador en contenedor:** sin Java instalado en este entorno (`java: not found`). Para ejecutar `npm run test:rules` sin instalar Java en la computadora del organizador, se configuró **GitHub Actions (`.github/workflows/ci.yml` con Java 17)** y un respaldo opcional en `docker-compose.yml`.
+- **Java / Emulador en contenedor:** sin Java instalado en este entorno (`java: not found`). Para ejecutar `npm run test:rules` sin instalar Java en la computadora del organizador, se configuró **GitHub Actions (`.github/workflows/ci.yml` con Java 21)** y un respaldo opcional en `docker-compose.yml`.
 - **Dependencias instaladas y auditoría (`bun audit`):** **0 vulnerabilidades** conocidas (tras reemplazar `xlsx` por `exceljs`, actualizar `firebase` a `^13.4.0`, fijar `overrides` y añadir `@playwright/test` + `@axe-core/playwright` en `devDependencies`).
 - **Calidad de código:** TypeScript `"strict": true`, ESLint con `react-hooks`, `jsx-a11y` y `@firebase/eslint-plugin-security-rules`.
 
@@ -59,11 +59,11 @@
 
 ---
 
-## 3. Seguridad HTTP, CSP y Cloudflare Pages
+## 3. Seguridad HTTP, CSP y Cloudflare Workers
 
 - **Única fuente de verdad:** `scripts/security-headers.mjs` genera `public/_headers` (en `prebuild` → `dist/_headers`) e inyecta exactamente la misma política base en `vite preview` (`vite.config.ts`).
 - **Reglas clave verificadas:**
   - Sin `Cross-Origin-Opener-Policy: same-origin` (preserva *popup* de Google Auth).
   - Sin `unsafe-inline` ni `unsafe-eval` en `script-src`.
-  - Sin `public/404.html` ni catch-all `/* /index.html 200` en `_redirects`, garantizando que Cloudflare Pages resuelva `/admin` y `/participantes` sin 404 al recargar.
+  - Sin `public/404.html` ni catch-all `/* /index.html 200` en `_redirects`, y `not_found_handling: "single-page-application"` en `wrangler.jsonc`, garantizando que Cloudflare Workers resuelva `/admin` y `/participantes` sin 404 al recargar.
   - `Strict-Transport-Security` y `upgrade-insecure-requests` activos únicamente en producción HTTPS (`dist/_headers`), evitando fallos de carga sobre HTTP local (`vite preview`).

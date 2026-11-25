@@ -89,7 +89,7 @@ R1–R7 | Regresiones Parte 2 (liga 1:1 comprobante-participante, Juvenil, purga
     -> Corregido y verificado [VERIFICADO en código y build]
 
 --- Fase 5.1 (Pruebas y CI: 4.1–4.3) ---
-4.1 | CI con Java 17 para `npm run test:rules` (V1–V34) + docker-compose opcional
+4.1 | CI con Java 21 para `npm run test:rules` (V1–V34) + docker-compose opcional
     -> Configurado [NO VERIFICADO en ejecución real por falta de Java y de repo Git en el contenedor]
 4.2 | Suite Playwright E2E + Axe contra build + emulador (`tests/e2e/app.spec.ts`)
     -> Implementado [NO VERIFICADO contra emulador por falta de Java; navegación/rutas/consola en vite preview SÍ VERIFICADAS]
@@ -212,7 +212,7 @@ Cambios de orígenes/directivas respecto de la línea base 5.3.2 y justificació
 - Pruebas de reglas con emulador (`npm run test:rules`, 34 vectores V1–V34) y scripts
   `seed:emulator` / `loadtest:emulator`:
   **NO EJECUTADAS** en este contenedor porque no hay `java` instalado (`java: not found`).
-  Quedaron listas para correr automáticamente en `.github/workflows/ci.yml` (Java 17) o
+  Quedaron listas para correr automáticamente en `.github/workflows/ci.yml` (Java 21) o
   localmente con `docker compose run --rm firestore-tests`.
 - Pruebas E2E Playwright contra emulador (`tests/e2e/app.spec.ts`):
   **NO EJECUTADAS** contra emulador por ausencia de Java en el contenedor. Sí se realizó
@@ -776,7 +776,7 @@ service cloud.firestore {
 | Lecturas repetidas en `/participantes` si hay pico inusual (> 50k/día) | Medio (corte diario Spark sin costo) | Límite 500 docs, caché 60s, pausa en segundo plano, plan de PDF por WhatsApp | Organizador |
 | Datos de pago públicos en `/configuracion` | Bajo (necesario para depósitos) | Aviso explícito + restricción de escritura solo admin + validación anti-ejemplos | Organizador |
 | Un usuario escribe manualmente otro correo con variaciones para saltarse unicidad | Bajo | `/registro_llaves` SHA-256 por correo y WhatsApp + filtro «Posibles duplicados» en admin | Organizador |
-| Falta de ejecución en vivo de reglas/E2E antes de subir a GitHub | Alto hasta correr CI | Workflow `.github/workflows/ci.yml` listo con Java 17 y emulador | Organizador / quien suba el repo a GitHub |
+| Falta de ejecución en vivo de reglas/E2E antes de subir a GitHub | Alto hasta correr CI | Workflow `.github/workflows/ci.yml` listo con Java 21 y emulador | Organizador / quien suba el repo a GitHub |
 
 --------------------------------------------------------------------------------
 8. LISTA GO / NO-GO DE LANZAMIENTO (RESUMEN)
@@ -818,7 +818,7 @@ service cloud.firestore {
 --------------------------------------------------------------------------------
 11. LO QUE NO SE PUDO HACER EN ESTE CONTENEDOR (CON PRIORIDAD SUGERIDA)
 --------------------------------------------------------------------------------
-1. [PRIORIDAD CRÍTICA] Ejecutar `npm run test:rules` (34 vectores V1–V34), `seed:emulator`, `loadtest:emulator` y `test:e2e` contra el emulador de Firestore/Auth: bloqueado por ausencia de `java` en el entorno (`java: not found`). Se mitiga subiendo el proyecto a GitHub para que `.github/workflows/ci.yml` los ejecute con Java 17, o corriendo `docker compose run --rm firestore-tests`.
+1. [PRIORIDAD CRÍTICA] Ejecutar `npm run test:rules` (34 vectores V1–V34), `seed:emulator`, `loadtest:emulator` y `test:e2e` contra el emulador de Firestore/Auth: bloqueado por ausencia de `java` en el entorno (`java: not found`). Se mitiga subiendo el proyecto a GitHub para que `.github/workflows/ci.yml` los ejecute con Java 21, o corriendo `docker compose run --rm firestore-tests`.
 2. [PRIORIDAD ALTA] Verificar en vivo el workflow de GitHub Actions y revisar historial Git (`.git`): el espacio de trabajo no cuenta con repositorio `.git` ni conexión a GitHub. Se realizó búsqueda directa de secretos y URLs antiguas sobre todos los archivos del workspace sin hallazgos activos.
 3. [PRIORIDAD ALTA] Publicar en Cloudflare Pages, correr `curl -I` sobre la URL pública real, correr PageSpeed Insights/Lighthouse real y probar login con Google en Safari de iPhone y Chrome móvil con datos celulares reales.
 4. [PRIORIDAD MEDIA] Verificar visualmente en Firebase Console las reglas desplegadas, dar de alta al primer admin en `admins_by_email` y activar App Check tras comprobar solicitudes verificadas.

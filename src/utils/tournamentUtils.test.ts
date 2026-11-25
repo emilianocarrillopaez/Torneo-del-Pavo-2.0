@@ -564,4 +564,108 @@ test('generate-seo-files blocks forbidden internal files in public/ and excludes
   }
 });
 
+test('check-wrangler-config validates valid wrangler.jsonc (with comments) and rejects every invalid configuration', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { validateWranglerConfig } = await import('../../scripts/check-wrangler-config.mjs');
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pavo-wrangler-test-'));
+  try {
+    // 1. Archivo faltante
+    assert.throws(() => validateWranglerConfig(tmpRoot), /Falta wrangler\.jsonc/);
+
+    // 2. Configuración válida con comentarios JSONC y URL literal https:// (no se debe cortar como comentario)
+    const wranglerFile = path.join(tmpRoot, 'wrangler.jsonc');
+    fs.writeFileSync(
+      wranglerFile,
+      `{
+        // Comentario de línea https://ejemplo.com
+        /* Bloque multilínea */
+        "name": "torneo-del-pavo-2-0",
+        "compatibility_date": "2026-11-25",
+        "assets": {
+          "directory": "./dist",
+          "not_found_handling": "single-page-application",
+        },
+      }`,
+      'utf8'
+    );
+    const okConfig = validateWranglerConfig(tmpRoot);
+    assert.equal(okConfig.name, 'torneo-del-pavo-2-0');
+
+    // 3. Nombre distinto
+    fs.writeFileSync(
+      wranglerFile,
+      JSON.stringify({
+        name: 'otro-worker',
+        assets: { directory: './dist', not_found_handling: 'single-page-application' },
+      }),
+      'utf8'
+    );
+    assert.throws(() => validateWranglerConfig(tmpRoot), /torneo-del-pavo-2-0/);
+
+    // 4. Directorio distinto de ./dist
+    fs.writeFileSync(
+      wranglerFile,
+      JSON.stringify({
+        name: 'torneo-del-pavo-2-0',
+        assets: { directory: './build', not_found_handling: 'single-page-application' },
+      }),
+      'utf8'
+    );
+    assert.throws(() => validateWranglerConfig(tmpRoot), /assets\.directory/);
+
+    // 5. not_found_handling distinto de single-page-application
+    fs.writeFileSync(
+      wranglerFile,
+      JSON.stringify({
+        name: 'torneo-del-pavo-2-0',
+        assets: { directory: './dist', not_found_handling: '404-page' },
+      }),
+      'utf8'
+    );
+    assert.throws(() => validateWranglerConfig(tmpRoot), /not_found_handling/);
+
+    // 6. Presencia de "main"
+    fs.writeFileSync(
+      wranglerFile,
+      JSON.stringify({
+        name: 'torneo-del-pavo-2-0',
+        main: 'src/worker.ts',
+        assets: { directory: './dist', not_found_handling: 'single-page-application' },
+      }),
+      'utf8'
+    );
+    assert.throws(() => validateWranglerConfig(tmpRoot), /"main"/);
+
+    // 7. Existencia de dist/404.html
+    fs.writeFileSync(
+      wranglerFile,
+      JSON.stringify({
+        name: 'torneo-del-pavo-2-0',
+        assets: { directory: './dist', not_found_handling: 'single-page-application' },
+      }),
+      'utf8'
+    );
+    fs.mkdirSync(path.join(tmpRoot, 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(tmpRoot, 'dist', '404.html'), '<h1>404</h1>', 'utf8');
+    assert.throws(() => validateWranglerConfig(tmpRoot), /dist\/404\.html/);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('parseJavaMajorVersion parses Java 8, 17, 21+, and invalid outputs accurately', async () => {
+  const { parseJavaMajorVersion } = await import('../../scripts/run-rules-tests.mjs');
+
+  assert.equal(parseJavaMajorVersion('openjdk version "21.0.5" 2024-10-15 LTS'), 21);
+  assert.equal(parseJavaMajorVersion('java version "23.0.1" 2024-10-15'), 23);
+  assert.equal(parseJavaMajorVersion('openjdk version "17.0.12" 2024-07-16'), 17);
+  assert.equal(parseJavaMajorVersion('java version "1.8.0_402"'), 8);
+  assert.equal(parseJavaMajorVersion(''), null);
+  assert.equal(parseJavaMajorVersion('not-java-output'), null);
+});
+
+
 

@@ -77,19 +77,20 @@ export function resolveSiteUrl({ strict = true } = {}) {
   const fromEnvFile = explicit === undefined ? readEnvFileVar('VITE_SITE_URL') : undefined;
   const raw = (explicit ?? fromEnvFile ?? '').trim();
 
-  // Falla estrictamente en CI, Cloudflare Pages, STRICT_SITE_URL=1 o si se dejó vacía explícitamente.
+  // Falla estrictamente en CI, Cloudflare (Workers/Pages), STRICT_SITE_URL=1 o si se dejó vacía explícitamente.
   // En vista previa o contenedores sin esas variables (p. ej. Cloud Run npm run start), usa DEFAULT_SITE_URL.
   const isStrictEnv =
     strict &&
     (explicit === '' ||
       process.env.CI === 'true' ||
       process.env.CF_PAGES === '1' ||
+      process.env.WORKERS_CI === '1' ||
       process.env.STRICT_SITE_URL === '1');
 
   if (!raw) {
     if (isStrictEnv) {
       throw new Error(
-        `❌ Error de compilación: VITE_SITE_URL no está definida. Configúrala en Cloudflare Pages / GitHub Actions / .env (ej. VITE_SITE_URL=${DEFAULT_SITE_URL}) antes de compilar producción.`
+        `❌ Error de compilación: VITE_SITE_URL no está definida. Configúrala en Cloudflare / GitHub Actions / .env (ej. VITE_SITE_URL=${DEFAULT_SITE_URL}) antes de compilar producción.`
       );
     }
     console.warn(

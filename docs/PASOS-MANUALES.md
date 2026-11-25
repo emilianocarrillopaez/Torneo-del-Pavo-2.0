@@ -54,12 +54,12 @@ Las reglas protegen la privacidad de menores, recibos e inscritos.
 
 ---
 
-## 4. Publicar el sitio en Cloudflare Pages
+## 4. Publicar el sitio en Cloudflare Workers
 
 El sitio web ya no se publica en Firebase Hosting. Sigue paso a paso la guía [`docs/DESPLIEGUE-CLOUDFLARE.md`](DESPLIEGUE-CLOUDFLARE.md) para:
-1. Conectar tu repositorio **privado** de GitHub a **Cloudflare Pages**.
-2. Configurar **Build system v3**, el comando de compilación (`bun install --frozen-lockfile && bun run build`), la carpeta de salida (`dist`) y las variables (`NODE_VERSION=22.23.5`, `BUN_VERSION=1.4.4`, `VITE_APP_ENV=production`, `VITE_SITE_URL=https://torneo-del-pavo.pages.dev`).
-3. Confirmar la URL pública resultante (`https://torneo-del-pavo.pages.dev` o tu dominio propio) y volver a desplegar si cambió, para que `canonical`, `sitemap.xml`, `robots.txt` y las tarjetas de WhatsApp apunten a esa dirección final.
+1. Conectar tu repositorio **privado** de GitHub al Worker **`torneo-del-pavo-2-0`** en **Cloudflare Workers**.
+2. Configurar **Build command:** `bun run build`, **Deploy command:** `npx wrangler deploy`, **Root directory** vacío y las **Build Variables** (`NODE_VERSION=22.23.5`, `BUN_VERSION=1.4.4`, `VITE_APP_ENV=production`, `VITE_SITE_URL=<URL real>`).
+3. Confirmar la URL pública `.workers.dev` (o tu dominio propio) en *Settings → Domains & Routes* y volver a desplegar si cambió, para que `canonical`, `sitemap.xml`, `robots.txt` y las tarjetas de WhatsApp apunten a esa dirección final.
 
 ---
 
@@ -69,11 +69,11 @@ Cada vez que tengas una URL definitiva nueva (`*.pages.dev` y, si aplica, domini
 
 1. **Firebase Auth → Dominios autorizados:**
    - Entra a **Firebase Console → Build → Authentication → Settings → Authorized domains**.
-   - Agrega tu dominio `*.pages.dev` y, si contrataste dominio propio, agrégalo también (con y sin `www` si aplica).
-   - **Elimina los dominios temporales de desarrollo** (`ais-dev-*`, `ais-pre-*`) una vez que termines la migración a Cloudflare Pages.
+   - Agrega tu dominio `.workers.dev` y, si contrataste dominio propio, agrégalo también (con y sin `www` si aplica).
+   - **Elimina los dominios temporales de desarrollo** (`ais-dev-*`, `ais-pre-*`) una vez que termines la migración a Cloudflare Workers.
 2. **reCAPTCHA Enterprise (para App Check):**
-   - Entra a [Google Cloud Console → reCAPTCHA Enterprise](https://console.cloud.google.com/security/recaptcha?project=yogic-decoder-5lxdt) (o reCAPTCHA Admin) y crea/edita la clave de sitio agregando tu dominio `*.pages.dev` y dominio propio.
-   - Registra esa **Site Key** en **Firebase Console → Build → App Check → Apps** y colócala en la variable `VITE_RECAPTCHA_SITE_KEY` en Cloudflare Pages (y/o en `firebase-applet-config.json`).
+   - Entra a [Google Cloud Console → reCAPTCHA Enterprise](https://console.cloud.google.com/security/recaptcha?project=yogic-decoder-5lxdt) (o reCAPTCHA Admin) y crea/edita la clave de sitio agregando tu dominio `.workers.dev` y dominio propio.
+   - Registra esa **Site Key** en **Firebase Console → Build → App Check → Apps** y colócala en la variable `VITE_RECAPTCHA_SITE_KEY` en Cloudflare Workers (*Build Variables*) y/o en `firebase-applet-config.json`.
 3. **Restricción de la API Key del navegador:**
    - Entra a [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials?project=yogic-decoder-5lxdt).
    - Abre la clave Web usada por Firebase y en **Application restrictions → Websites (HTTP referrers)** agrega únicamente `https://torneo-del-pavo.pages.dev/*` y tu dominio propio si aplica (`http://localhost:*` déjalo solo mientras desarrolles).
@@ -93,7 +93,7 @@ Si migraste datos o agregaste registros manualmente antes de publicar:
 
 Si activas el bloqueo obligatorio (*Enforcement*) antes de que los navegadores envíen tokens válidos, **nadie podrá inscribirse**. Hazlo exactamente en este orden:
 
-1. Publica primero en Cloudflare Pages con `VITE_RECAPTCHA_SITE_KEY` (o `recaptchaSiteKey`) ya configurada.
+1. Publica primero en Cloudflare Workers con `VITE_RECAPTCHA_SITE_KEY` (o `recaptchaSiteKey`) ya configurada.
 2. Abre el sitio publicado en una ventana normal y realiza una visita al padrón público y una inscripción de prueba.
 3. Espera unos minutos, entra a **Firebase Console → App Check → APIs / Metrics** y confirma en **Cloud Firestore** que aparecen **solicitudes verificadas** (línea verde).
 4. **Solo cuando veas tráfico verificado**, haz clic en **Enforce (Aplicar)** para **Cloud Firestore**.
@@ -110,7 +110,7 @@ Si activas el bloqueo obligatorio (*Enforcement*) antes de que los navegadores e
 
 ## 9. Correr la prueba de humo en producción
 
-Ejecuta y marca todas las casillas de [`docs/PRUEBA-DE-HUMO.md`](PRUEBA-DE-HUMO.md) sobre la URL pública real de Cloudflare Pages (incluyendo prueba con celular en datos móviles y Safari/Chrome móvil).
+Ejecuta y marca todas las casillas de [`docs/PRUEBA-DE-HUMO.md`](PRUEBA-DE-HUMO.md) sobre la URL pública real de Cloudflare Workers (incluyendo prueba con celular en datos móviles y Safari/Chrome móvil).
 
 ---
 

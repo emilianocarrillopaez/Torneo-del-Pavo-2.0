@@ -54,14 +54,14 @@ jobs:
             exit 1
           fi
 
-      - name: Compilar producción para Cloudflare Pages
+      - name: Compilar producción para Cloudflare
         env:
           VITE_SITE_URL: ${{ vars.VITE_SITE_URL || 'https://torneo-del-pavo.pages.dev' }}
           VITE_APP_ENV: production
           STRICT_SITE_URL: '1'
         run: bun run build
 
-      - name: Validar artefactos generados para Cloudflare Pages
+      - name: Validar artefactos generados para Cloudflare
         run: |
           test -f dist/_headers
           test -f dist/robots.txt
@@ -69,6 +69,13 @@ jobs:
           test -f dist/img/cartel-2026.webp
           test ! -e dist/404.html
           test ! -d dist/assets/aistudio
+
+      - name: Verificar configuración Wrangler y empaque estático (dry-run)
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          bun run check:wrangler
+          ./node_modules/.bin/wrangler deploy --dry-run
 
   firestore-rules:
     name: Pruebas de Reglas Firestore (Emulador)
@@ -87,11 +94,11 @@ jobs:
         with:
           bun-version: '1.4.4'
 
-      - name: Configurar Java 17 para Firestore Emulator
+      - name: Configurar Java 21 para Firestore Emulator
         uses: actions/setup-java@v4.7.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Instalar dependencias con lockfile congelado
         run: bun install --frozen-lockfile
@@ -117,11 +124,11 @@ jobs:
         with:
           bun-version: '1.4.4'
 
-      - name: Configurar Java 17 para Emuladores Firebase
+      - name: Configurar Java 21 para Emuladores Firebase
         uses: actions/setup-java@v4.7.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Instalar dependencias con lockfile congelado
         run: bun install --frozen-lockfile

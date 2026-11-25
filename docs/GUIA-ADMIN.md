@@ -132,5 +132,5 @@ Por diseño de privacidad, aunque cualquier visitante con el enlace puede consul
 **Cómo revertirlo si el comité decide permitir indexación en Google:**
 1. En `scripts/security-headers.mjs`, elimina los bloques `/participantes` y `/participantes/*` con `X-Robots-Tag: noindex, nofollow`.
 2. En `scripts/generate-seo-files.mjs`, vuelve a incluir `Allow: /participantes` en `robots.txt` y la entrada `<url>` de `/participantes` en `sitemap.xml`.
-3. Ejecuta `bun run build` y sube el cambio a la rama `main` para redesplegar en Cloudflare Pages.
+3. Ejecuta `bun run build` y sube el cambio a la rama `main` para redesplegar en Cloudflare Workers.
 

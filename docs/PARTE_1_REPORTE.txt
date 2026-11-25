@@ -640,7 +640,7 @@ service cloud.firestore {
   NO EJECUTABLE EN ESTE CONTENEDOR por falta de Java JRE ("Error: Could not
   spawn java -version. Please make sure Java is installed and on your system
   PATH."). La suite completa de 20 vectores quedó escrita en
-  `tests/rules/firestore.rules.test.ts` lista para ejecutarse con Java 17+.
+  `tests/rules/firestore.rules.test.ts` lista para ejecutarse con Java 21+.
 - bun audit (sobre bun.lock):
   Se eliminaron 2 vulnerabilidades High al reemplazar xlsx@0.18.5 por
   exceljs@^4.4.0.

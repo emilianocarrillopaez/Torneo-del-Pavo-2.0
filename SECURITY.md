@@ -1,6 +1,6 @@
 # Seguridad y Privacidad — Torneo del Pavo 2.0
 
-Este documento describe el modelo de amenazas, las defensas aplicadas en Firestore Rules y Cloudflare Pages, y los riesgos residuales aceptados para la operación del torneo.
+Este documento describe el modelo de amenazas, las defensas aplicadas en Firestore Rules y Cloudflare Workers (Static Assets), y los riesgos residuales aceptados para la operación del torneo.
 
 ---
 
@@ -45,12 +45,12 @@ Todas las cabeceras de producción y vista previa local provienen de un solo arc
   - `default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`.
   - `script-src` sin `'unsafe-inline'` ni `'unsafe-eval'`; restringido a `'self'`, Google Sign-In (`apis.google.com`) y reCAPTCHA Enterprise (`www.google.com/recaptcha/`, `www.gstatic.com/recaptcha/`).
   - `frame-src` permite `blob:` (visor aislado de PDFs en `<iframe sandbox="">`), Google Auth y reCAPTCHA.
-  - `upgrade-insecure-requests` activo en producción HTTPS (Cloudflare Pages).
+  - `upgrade-insecure-requests` activo en producción HTTPS (Cloudflare Workers).
 - **`Cross-Origin-Opener-Policy`:** **no se configura `same-origin`** de forma intencional para no romper la ventana emergente de Google Sign-In.
 - **`X-Frame-Options: DENY`**: bloquea *clickjacking* en navegadores antiguos.
 - **`X-Content-Type-Options: nosniff`**: evita interpretación errónea de MIME types.
 - **`Referrer-Policy: strict-origin-when-cross-origin`** y **`Permissions-Policy`** (cámara, micrófono, geolocalización, pagos y USB deshabilitados).
-- **`Strict-Transport-Security: max-age=31536000; includeSubDomains`** en Cloudflare Pages.
+- **`Strict-Transport-Security: max-age=31536000; includeSubDomains`** en Cloudflare Workers.
 - **`X-Robots-Tag: noindex, nofollow`** en `/admin`, `/admin/*`, `/participantes` y `/participantes/*` (y exclusión de `/participantes` de `sitemap.xml` y `robots.txt`) para evitar que los buscadores indexen el padrón público con nombres abreviados (incluidos menores de edad); si el comité decide revertirlo, el procedimiento está en [`docs/GUIA-ADMIN.md`](docs/GUIA-ADMIN.md).
 
 ---

@@ -15,6 +15,7 @@
     "lint:rules": "eslint firestore.rules",
     "test": "tsx --test src/utils/tournamentUtils.test.ts",
     "test:rules": "node scripts/run-rules-tests.mjs",
+    "check:wrangler": "node scripts/check-wrangler-config.mjs",
     "seed:emulator": "node scripts/seed-emulator.mjs",
     "loadtest:emulator": "node scripts/load-test-emulator.mjs",
     "test:e2e": "playwright test"
@@ -52,7 +53,8 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "~5.9.3",
-    "typescript-eslint": "^8.73.0"
+    "typescript-eslint": "^8.73.0",
+    "wrangler": "4.168.0"
   },
   "overrides": {
     "@grpc/grpc-js": "^1.14.7",

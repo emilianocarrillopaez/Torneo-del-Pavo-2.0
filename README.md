@@ -6,7 +6,7 @@ Plataforma oficial de convocatoria, inscripción con comprobante de pago, padró
 
 ## Arquitectura y Hosting
 
-- **Frontend estático y CDN:** **Cloudflare Pages** (plan gratuito). No se usa Firebase Hosting.
+- **Frontend estático y CDN:** **Cloudflare Workers (Static Assets)** (plan gratuito, `wrangler.jsonc`). No se usa Firebase Hosting *(el camino alterno con Cloudflare Pages queda solo documentado en `docs/DESPLIEGUE-CLOUDFLARE.md`)*.
 - **Backend y seguridad:** **Firebase Spark (plan gratuito)** en el proyecto `yogic-decoder-5lxdt`:
   - **Cloud Firestore** en la **base con nombre** `ai-studio-1b982696-e484-4fe2-a9e1-54984917aae2`.
   - **Firebase Authentication** (solo Google Sign-In con correo verificado para administradores).
@@ -22,7 +22,8 @@ Plataforma oficial de convocatoria, inscripción con comprobante de pago, padró
 - **Gestor de paquetes:** **Bun `1.4.4`** con **un único lockfile (`bun.lock`)**.
   - Instala siempre con `bun install --frozen-lockfile`.
   - No generes `package-lock.json` ni `yarn.lock`.
-- **Java (JRE/JDK 17+):** **no es obligatorio** para el organizador ni para desarrollar la interfaz. Las pruebas de reglas de Firestore corren automáticamente en GitHub Actions (`.github/workflows/ci.yml`), y opcionalmente en local con Docker (`docker compose run --rm firestore-tests`).
+- **Java (JRE/JDK 21+):** **no es obligatorio** para el organizador ni para desarrollar la interfaz. Las pruebas de reglas de Firestore corren automáticamente en GitHub Actions (`.github/workflows/ci.yml` con Java 21), y opcionalmente en local con Docker (`docker compose run --rm firestore-tests`).
+- **Dependabot:** configurado en `.github/dependabot.yml` (`bun` + `github-actions`, límite de 3 PRs/semana). **No fusiones un pull request de Dependabot si el CI no está en verde, y no aceptes cambios que modifiquen `package.json` sin actualizar `bun.lock`.**
 
 ---
 
@@ -47,14 +48,15 @@ npm run loadtest:emulator
 # Compilación de producción (ejecuta prebuild: genera public/_headers, robots.txt y sitemap.xml)
 VITE_SITE_URL=https://torneo-del-pavo.pages.dev bun run build
 
-# Vista previa local con las mismas cabeceras CSP que Cloudflare Pages (sin HSTS/upgrade en HTTP)
+# Vista previa local con las mismas cabeceras CSP que Cloudflare Workers (sin HSTS/upgrade en HTTP)
 bun run preview
 
 # Calidad, tipos, reglas y pruebas
 bun run lint          # tsc --noEmit + eslint
 bun run lint:rules    # @firebase/eslint-plugin-security-rules sobre firestore.rules
-bun run test          # Pruebas unitarias (incluye validación de cabeceras y nombres Unicode)
-npm run test:rules    # Pruebas de reglas Firestore en emulador (requiere Java 17+ o Docker)
+bun run test          # Pruebas unitarias (incluye cabeceras, Wrangler, Java 21 y Unicode)
+bun run check:wrangler # Valida wrangler.jsonc y ausencia de dist/404.html
+npm run test:rules    # Pruebas de reglas Firestore en emulador (requiere Java 21+ o Docker)
 npm run test:e2e      # Pruebas Playwright + axe-core contra build local y emulador
 bun audit --audit-level=high
 ```
@@ -63,7 +65,7 @@ bun audit --audit-level=high
 
 ## Pruebas Locales con Emulador (sin tocar datos reales)
 
-1. Arranca el emulador de Firestore y Auth (con Java 17+ o usando `docker compose up emulators`):
+1. Arranca el emulador de Firestore y Auth (con Java 21+ o usando `docker compose up emulators`):
    ```bash
    bunx --no-install firebase emulators:start --project yogic-decoder-5lxdt --only firestore,auth
    ```
@@ -77,9 +79,9 @@ bun audit --audit-level=high
 
 ---
 
-## Despliegue en Cloudflare Pages y Reglas de Firestore
+## Despliegue en Cloudflare Workers y Reglas de Firestore
 
-- **Sitio web (Cloudflare Pages):** se publica automáticamente desde la rama `main` mediante la integración Git de Cloudflare Pages (comando `bun install --frozen-lockfile && bun run build`, directorio `dist`). Consulta la guía paso a paso en [`docs/DESPLIEGUE-CLOUDFLARE.md`](docs/DESPLIEGUE-CLOUDFLARE.md).
+- **Sitio web (Cloudflare Workers — Static Assets):** se publica automáticamente desde la rama `main` mediante `wrangler.jsonc` (`bun run build` + `npx wrangler deploy`, carpeta `./dist`). Consulta la guía paso a paso en [`docs/DESPLIEGUE-CLOUDFLARE.md`](docs/DESPLIEGUE-CLOUDFLARE.md).
 - **Reglas e índices de Firestore (siempre a la base con nombre):**
   ```bash
   bunx --no-install firebase login

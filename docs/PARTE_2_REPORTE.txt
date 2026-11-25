@@ -22,7 +22,7 @@ WCAG 2.1 AA (`useFocusTrap` y `Esc` en modales), experiencia de registro con lis
 de espera y mejoras operativas en `/admin` (auditoría de pagos, papelera con
 restauración, check-in, exportación Suizo y duplicados heurísticos).
 Riesgos pendientes de entorno/manuales: correr `npm run test:rules` en equipo con
-Java 17+, medir Lighthouse en navegador local y completar `docs/PASOS-MANUALES.md`.
+Java 21+, medir Lighthouse en navegador local y completar `docs/PASOS-MANUALES.md`.
 
 
 2. TABLA DE PUNTOS (3.x / 4.x / 5.x) -> ARCHIVOS MODIFICADOS -> ESTADO
@@ -78,7 +78,7 @@ Java 17+, medir Lighthouse en navegador local y completar `docs/PASOS-MANUALES.m
   Archivos: firestore.rules, scripts/run-rules-tests.mjs,
             src/services/tournamentService.ts, src/types/tournament.ts,
             docs/PASOS-MANUALES.md, tests/rules/firestore.rules.test.ts (V29)
-  Estado: Corregido en código + pendiente ejecución manual con Java 17+
+  Estado: Corregido en código + pendiente ejecución manual con Java 21+
           (el script detecta ausencia de `java` y muestra comandos exactos para
           Windows, macOS y Ubuntu/Debian; bordes de fechaCorteMayoriaEdad
           probados en V29 y pruebas unitarias).

@@ -85,11 +85,11 @@ Guía de acción rápida para el comité organizador ante incidentes durante la 
 
 ---
 
-## Escenario F: Publicación defectuosa en Cloudflare Pages (pantalla en blanco o error tras actualizar)
+## Escenario F: Publicación defectuosa en Cloudflare Workers (pantalla en blanco o error tras actualizar)
 
 **Meta:** restaurar el servicio en **menos de 5 minutos**.
 
-1. Entra a **Cloudflare Dashboard → Workers & Pages → tu proyecto (`torneo-del-pavo`) → Deployments**.
-2. Localiza el último despliegue anterior que mostraba estado correcto (*Success*).
+1. Entra a **Cloudflare Dashboard → Workers & Pages → tu Worker (`torneo-del-pavo-2-0`) → Deployments**.
+2. Localiza el último despliegue anterior que mostraba estado correcto.
 3. Haz clic en **`⋯` → Rollback to this deployment** y confirma.
 4. En menos de 1 minuto la URL pública volverá a la versión estable anterior mientras revisas el error en una rama de pruebas antes de volver a fusionar a `main`.
