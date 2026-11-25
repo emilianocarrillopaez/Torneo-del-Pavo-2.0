@@ -51,7 +51,7 @@ Todas las cabeceras de producción y vista previa local provienen de un solo arc
 - **`X-Content-Type-Options: nosniff`**: evita interpretación errónea de MIME types.
 - **`Referrer-Policy: strict-origin-when-cross-origin`** y **`Permissions-Policy`** (cámara, micrófono, geolocalización, pagos y USB deshabilitados).
 - **`Strict-Transport-Security: max-age=31536000; includeSubDomains`** en Cloudflare Pages.
-- **`X-Robots-Tag: noindex, nofollow`** en `/admin` y `/admin/*`.
+- **`X-Robots-Tag: noindex, nofollow`** en `/admin`, `/admin/*`, `/participantes` y `/participantes/*` (y exclusión de `/participantes` de `sitemap.xml` y `robots.txt`) para evitar que los buscadores indexen el padrón público con nombres abreviados (incluidos menores de edad); si el comité decide revertirlo, el procedimiento está en [`docs/GUIA-ADMIN.md`](docs/GUIA-ADMIN.md).
 
 ---
 

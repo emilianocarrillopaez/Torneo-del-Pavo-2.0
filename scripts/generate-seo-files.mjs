@@ -2,6 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { generateHeadersFileContent } from './security-headers.mjs';
+import { DEFAULT_SITE_URL } from './site-config.mjs';
+
+export { DEFAULT_SITE_URL };
+
+const FORBIDDEN_PUBLIC_DIR_NAMES = new Set(['aistudio', 'docs']);
+const FORBIDDEN_PUBLIC_EXTENSIONS = new Set(['.md', '.log']);
 
 function readEnvFileVar(key) {
   const candidates = ['.env.local', '.env.production', '.env'];
@@ -29,30 +35,67 @@ function readEnvFileVar(key) {
   return undefined;
 }
 
+export function assertNoForbiddenPublicFiles(publicDir) {
+  if (!fs.existsSync(publicDir)) return;
+
+  const offenders = [];
+
+  function walk(dir, relPrefix = '') {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const relPath = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (FORBIDDEN_PUBLIC_DIR_NAMES.has(entry.name.toLowerCase())) {
+          offenders.push(`carpeta prohibida "public/${relPath}/"`);
+          continue;
+        }
+        walk(fullPath, relPath);
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        if (FORBIDDEN_PUBLIC_EXTENSIONS.has(ext)) {
+          offenders.push(`archivo prohibido "public/${relPath}"`);
+        } else if (ext === '.txt' && relPath !== 'robots.txt') {
+          offenders.push(`archivo .txt no permitido "public/${relPath}" (solo robots.txt)`);
+        }
+      }
+    }
+  }
+
+  walk(publicDir);
+
+  if (offenders.length > 0) {
+    throw new Error(
+      `❌ Archivos o carpetas internas detectadas dentro de public/: ${offenders.join(', ')}. Elimínalos antes de compilar para no publicarlos en dist/.`
+    );
+  }
+}
+
 export function resolveSiteUrl({ strict = true } = {}) {
   const explicit = process.env.VITE_SITE_URL;
   const fromEnvFile = explicit === undefined ? readEnvFileVar('VITE_SITE_URL') : undefined;
   const raw = (explicit ?? fromEnvFile ?? '').trim();
 
+  // Falla estrictamente en CI, Cloudflare Pages, STRICT_SITE_URL=1 o si se dejó vacía explícitamente.
+  // En vista previa o contenedores sin esas variables (p. ej. Cloud Run npm run start), usa DEFAULT_SITE_URL.
   const isStrictEnv =
     strict &&
     (explicit === '' ||
       process.env.CI === 'true' ||
       process.env.CF_PAGES === '1' ||
-      process.env.STRICT_SITE_URL === '1' ||
-      !process.env.APPLET_ID);
+      process.env.STRICT_SITE_URL === '1');
 
   if (!raw) {
     if (isStrictEnv) {
       throw new Error(
-        '❌ Error de compilación: VITE_SITE_URL no está definida. Configúrala en Cloudflare Pages / GitHub Actions / .env (ej. VITE_SITE_URL=https://torneo-del-pavo.pages.dev) antes de compilar producción.'
+        `❌ Error de compilación: VITE_SITE_URL no está definida. Configúrala en Cloudflare Pages / GitHub Actions / .env (ej. VITE_SITE_URL=${DEFAULT_SITE_URL}) antes de compilar producción.`
       );
     }
-    const sandboxFallback = 'https://torneo-del-pavo.pages.dev';
     console.warn(
-      `⚠️  [sandbox] VITE_SITE_URL no definida; usando respaldo temporal ${sandboxFallback} solo para validación local.`
+      `⚠️  VITE_SITE_URL no definida; usando URL canónica por defecto ${DEFAULT_SITE_URL}.`
     );
-    return sandboxFallback;
+    return DEFAULT_SITE_URL;
   }
 
   let parsed;
@@ -74,11 +117,14 @@ export function resolveSiteUrl({ strict = true } = {}) {
   return raw.replace(/\/+$/, '');
 }
 
-export function generateSeoAndHeaderFiles({ strict = true } = {}) {
-  const publicDir = path.resolve(process.cwd(), 'public');
+export function generateSeoAndHeaderFiles({ strict = true, publicDir: customPublicDir = '' } = {}) {
+  const publicDir = customPublicDir || path.resolve(process.cwd(), 'public');
   if (!fs.existsSync(publicDir)) {
     fs.mkdirSync(publicDir, { recursive: true });
   }
+
+  // Bloquear archivos o carpetas internas dentro de public/ antes de generar dist/
+  assertNoForbiddenPublicFiles(publicDir);
 
   // Verificar restricción SPA de Cloudflare Pages (5.3.1-3)
   const forbidden404 = path.join(publicDir, '404.html');
@@ -104,28 +150,24 @@ export function generateSeoAndHeaderFiles({ strict = true } = {}) {
   fs.writeFileSync(path.join(publicDir, '_headers'), headersContent, 'utf8');
 
   // 2. Generar public/robots.txt desde VITE_SITE_URL
+  // Nota de privacidad: /participantes no lleva Allow ni Disallow para que los buscadores lean
+  // la cabecera HTTP X-Robots-Tag: noindex, nofollow sin quedar bloqueados en robots.txt.
   const robotsContent = [
     'User-agent: *',
     'Allow: /',
-    'Allow: /participantes',
     'Disallow: /admin',
     `Sitemap: ${siteUrl}/sitemap.xml`,
     '',
   ].join('\n');
   fs.writeFileSync(path.join(publicDir, 'robots.txt'), robotsContent, 'utf8');
 
-  // 3. Generar public/sitemap.xml desde VITE_SITE_URL
+  // 3. Generar public/sitemap.xml desde VITE_SITE_URL (solo la portada pública)
   const sitemapContent = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.com/schemas/sitemap/0.9">
   <url>
     <loc>${siteUrl}/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>${siteUrl}/participantes</loc>
-    <changefreq>daily</changefreq>
-    <priority>0.8</priority>
   </url>
 </urlset>
 `;

@@ -563,8 +563,8 @@ service cloud.firestore {
    - Ve a Build -> Firestore Database, abre el selector de base de datos arriba
      y elige `ai-studio-1b982696-e484-4fe2-a9e1-54984917aae2` (no uses `(default)`).
    - Crea la colección `admins_by_email` con un documento cuyo ID sea exactamente
-     tu correo en minúsculas (`emilianocarrillopaez@gmail.com`) y estos 4 campos:
-       * email (string): emilianocarrillopaez@gmail.com
+     tu correo en minúsculas (`tucorreo@gmail.com`) y estos 4 campos:
+       * email (string): tucorreo@gmail.com
        * nombre (string): tu nombre
        * rol (string): Director / Organizador
        * agregadoEn (string): fecha ISO actual (ej. 2026-11-20T00:00:00.000Z)

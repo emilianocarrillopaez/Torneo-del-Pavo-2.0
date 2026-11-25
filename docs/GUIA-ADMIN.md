@@ -6,7 +6,7 @@ Esta guía explica paso a paso cómo operar el torneo desde el panel de administ
 
 ## 1. Cómo entrar y salir del panel
 
-1. Abre la página del torneo y entra a **`/admin`** (por ejemplo `https://tu-sitio.pages.dev/admin`), o haz clic en el botón **Admin** en la parte inferior de la página.
+1. Abre la página del torneo y entra a **`/admin`** (`https://torneo-del-pavo.pages.dev/admin`), o haz clic en el botón **Admin** en la parte inferior de la página.
 2. Presiona **Iniciar sesión con Google** y elige la cuenta Gmail autorizada del comité.
    - *Nota:* si usas un correo que no ha sido autorizado, verás un aviso indicando que no tiene permisos.
 3. Por seguridad, si dejas el panel abierto sin actividad durante **30 minutos**, la sesión se cierra automáticamente.
@@ -118,3 +118,19 @@ En la barra superior de **Inscritos y Recibos**, usa los filtros (categoría, pa
   - El botón **Restaurar valores por defecto** recupera los textos base y los patrocinadores originales **sin borrar** tus datos bancarios reales ni tu WhatsApp.
   - Presiona siempre **Guardar Cambios de Convocatoria** al terminar.
 - **Pestaña Patrocinadores:** usa **Agregar Patrocinador** para subir un logotipo nuevo (`JPG`, `PNG` o `WEBP`), cambiar el orden en el carrusel o usar el icono del ojo para ocultar temporalmente a un patrocinador sin eliminarlo.
+
+---
+
+## 11. Privacidad del padrón público (`/participantes`) en Google y cómo revertirla
+
+Por diseño de privacidad, aunque cualquier visitante con el enlace puede consultar el padrón desde la página principal (`/participantes`), esta ruta **no aparece en resultados de Google ni otros buscadores**:
+- Incluye la cabecera HTTP `X-Robots-Tag: noindex, nofollow`.
+- No se lista en `sitemap.xml` ni se bloquea en `robots.txt` (para permitir que los buscadores lean el `noindex`).
+
+**Por qué se hizo así:** aunque los nombres están abreviados (`Apellido P. I.`), el listado incluye a **menores de edad**, por lo que evitar su indexación permanente en buscadores reduce exposición innecesaria fuera del torneo.
+
+**Cómo revertirlo si el comité decide permitir indexación en Google:**
+1. En `scripts/security-headers.mjs`, elimina los bloques `/participantes` y `/participantes/*` con `X-Robots-Tag: noindex, nofollow`.
+2. En `scripts/generate-seo-files.mjs`, vuelve a incluir `Allow: /participantes` en `robots.txt` y la entrada `<url>` de `/participantes` en `sitemap.xml`.
+3. Ejecuta `bun run build` y sube el cambio a la rama `main` para redesplegar en Cloudflare Pages.
+

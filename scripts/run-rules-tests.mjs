@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 
@@ -21,18 +23,38 @@ if (javaCheck.error || javaCheck.status !== 0) {
 }
 
 const isWin = process.platform === 'win32';
-const bin = isWin ? 'npx.cmd' : 'npx';
+const localFirebaseBin = path.resolve(
+  process.cwd(),
+  'node_modules',
+  '.bin',
+  isWin ? 'firebase.cmd' : 'firebase'
+);
+const localTsxBin = path.resolve(
+  process.cwd(),
+  'node_modules',
+  '.bin',
+  isWin ? 'tsx.cmd' : 'tsx'
+);
+
+if (!fs.existsSync(localFirebaseBin)) {
+  console.error('❌ No se encontró el binario local de `firebase-tools`. Ejecuta `bun install --frozen-lockfile`.');
+  process.exit(1);
+}
+
+const tsxCommand = fs.existsSync(localTsxBin)
+  ? `"${localTsxBin}" --test tests/rules/firestore.rules.test.ts`
+  : 'bunx --no-install tsx --test tests/rules/firestore.rules.test.ts';
+
 const args = [
-  'firebase',
   'emulators:exec',
   '--project',
   'yogic-decoder-5lxdt',
   '--only',
   'firestore',
-  'npx tsx --test tests/rules/firestore.rules.test.ts',
+  tsxCommand,
 ];
 
-const result = spawnSync(bin, args, {
+const result = spawnSync(localFirebaseBin, args, {
   stdio: 'inherit',
   shell: isWin,
   env: {

@@ -8,10 +8,10 @@ Ejecuta esta lista **después** de haber completado los pasos 1 a 8 de [`docs/PA
 
 ## 1. Verificación técnica de cabeceras y rutas profundas (`curl -I`)
 
-Ejecuta desde una terminal local reemplazando `https://TU-DOMINIO.pages.dev` y el nombre real de un archivo `.js` dentro de `dist/assets/` (puedes obtener el nombre exacto abriendo el código fuente de `/` o consultando `ls dist/assets`):
+Ejecuta desde una terminal local usando la URL publicada (`https://torneo-del-pavo.pages.dev` o tu dominio final) y el nombre real de un archivo `.js` dentro de `dist/assets/` (puedes obtener el nombre exacto abriendo el código fuente de `/` o consultando `ls dist/assets`):
 
 ```bash
-SITE="https://TU-DOMINIO.pages.dev"
+SITE="https://torneo-del-pavo.pages.dev"
 
 # 1. Raíz: debe responder HTTP 200 con CSP, X-Frame-Options: DENY, nosniff, Referrer-Policy, Permissions-Policy, HSTS
 #    y SIN Cross-Origin-Opener-Policy: same-origin
@@ -20,13 +20,16 @@ curl -sSI "$SITE/"
 # 2. Activos con hash: debe responder Cache-Control: public, max-age=31536000, immutable
 curl -sSI "$SITE/assets/<NOMBRE-ARCHIVO>.js"
 
-# 3. Ruta profunda /admin: debe responder HTTP 200 (HTML de la SPA, no 404) y X-Robots-Tag: noindex, nofollow
+# 3. Imágenes estáticas en /img/*: debe responder Cache-Control: public, max-age=86400
+curl -sSI "$SITE/img/cartel-2026.webp"
+
+# 4. Ruta profunda /admin: debe responder HTTP 200 (HTML de la SPA, no 404) y X-Robots-Tag: noindex, nofollow
 curl -sSI "$SITE/admin"
 
-# 4. Ruta profunda /participantes: debe responder HTTP 200 (no 404)
+# 5. Ruta profunda /participantes: debe responder HTTP 200 (no 404) y X-Robots-Tag: noindex, nofollow
 curl -sSI "$SITE/participantes"
 
-# 5. Archivos SEO y políticas
+# 6. Archivos SEO y políticas (robots.txt y sitemap.xml NO deben listar /participantes)
 curl -sS "$SITE/robots.txt"
 curl -sS "$SITE/sitemap.xml"
 ```
@@ -34,9 +37,10 @@ curl -sS "$SITE/sitemap.xml"
 Casillas de verificación técnica:
 - [ ] `/` devuelve `200`, `Content-Security-Policy` activa y **sin** `Cross-Origin-Opener-Policy: same-origin`.
 - [ ] `/assets/*.js` devuelve `Cache-Control: public, max-age=31536000, immutable`.
+- [ ] `/img/cartel-2026.webp` devuelve `Cache-Control: public, max-age=86400`.
 - [ ] `/admin` devuelve `200` también al recargar con `F5`, e incluye `X-Robots-Tag: noindex, nofollow`.
-- [ ] `/participantes` devuelve `200` también al recargar con `F5`.
-- [ ] `robots.txt`, `sitemap.xml`, `<link rel="canonical">` y JSON-LD apuntan al dominio final.
+- [ ] `/participantes` devuelve `200` también al recargar con `F5`, e incluye `X-Robots-Tag: noindex, nofollow`.
+- [ ] `robots.txt`, `sitemap.xml`, `<link rel="canonical">` y JSON-LD apuntan al dominio final y omiten `/participantes`.
 
 ---
 

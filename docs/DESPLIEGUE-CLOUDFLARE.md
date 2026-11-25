@@ -13,15 +13,16 @@ Sigue estos pasos en el orden exacto:
    - En el menú izquierdo ve a **Workers & Pages → Crear → Pages → Conectar a Git** (*Connect to Git*).
    - Autoriza tu cuenta de GitHub limitando el acceso **únicamente** al repositorio del torneo (se recomienda mantener el repositorio como **privado**).
 3. **Configurar la compilación (*Build settings*):**
-   - **Nombre del proyecto:** `torneo-del-pavo` (o el nombre que prefieras; definirá tu URL `*.pages.dev`).
+   - **Nombre del proyecto:** `torneo-del-pavo` (define la URL base `https://torneo-del-pavo.pages.dev`).
    - **Rama de producción (*Production branch*):** `main`
+   - **Build system version:** selecciona **Version 3 (v3)** en la configuración del proyecto para garantizar compatibilidad con versiones fijadas de Node y Bun.
    - **Comando de compilación (*Build command*):**
      ```bash
      bun install --frozen-lockfile && bun run build
      ```
    - **Directorio de salida (*Build output directory*):** `dist`
    - **Directorio raíz (*Root directory*):** `/` (déjalo vacío o `/`)
-   - *Nota sobre gestor de paquetes:* este repositorio usa exclusivamente **`bun.lock`** (sin `package-lock.json`) y Node `22.23.5` (`.node-version`). Fijar el comando explícito y `BUN_VERSION` evita fallos si Cloudflare intenta ejecutar `npm ci`.
+   - *Nota sobre gestor de paquetes:* este repositorio usa exclusivamente **`bun.lock`** (formato texto de Bun 1.4.4, sin `package-lock.json`) y Node **`22.23.5`** (`.node-version`). Es obligatorio fijar `BUN_VERSION=1.4.4` (igual que en `.github/workflows/ci.yml`) porque la versión por defecto de Bun en Cloudflare Pages puede ser anterior y no entender este formato de `bun.lock`.
 4. **Variables de entorno (*Environment variables*) — por separado:**
    Configura dos bloques distintos dentro de **Settings → Environment variables**:
 
@@ -41,7 +42,7 @@ Sigue estos pasos en el orden exacto:
    | `NODE_VERSION` | `22.23.5` |
    | `BUN_VERSION` | `1.4.4` |
    | `VITE_APP_ENV` | `staging` |
-   | `VITE_SITE_URL` | `https://preview-torneo-del-pavo.pages.dev` |
+   | `VITE_SITE_URL` | `https://torneo-del-pavo.pages.dev` *(o la URL `*.pages.dev` de vista previa si difiere)* |
    | `VITE_FIREBASE_STAGING_PROJECT_ID` | *(ID del proyecto Firebase de pruebas/staging, si aplica)* |
    | `VITE_FIREBASE_STAGING_API_KEY` | *(API Key Web del proyecto staging)* |
    | `VITE_FIREBASE_STAGING_AUTH_DOMAIN` | *(ej. `<staging-project>.firebaseapp.com`)* |
@@ -50,12 +51,12 @@ Sigue estos pasos en el orden exacto:
 
 5. **Primera publicación y actualización de URL:**
    - Haz clic en **Save and Deploy**.
-   - Anota la URL real asignada (ejemplo: `https://torneo-del-pavo-abc.pages.dev`).
-   - Ve a **Settings → Environment variables → Production**, edita **`VITE_SITE_URL`** con esa URL exacta (sin `/` al final) y ejecuta **Retry deployment** para que `index.html`, JSON-LD, `robots.txt` y `sitemap.xml` apunten al dominio definitivo.
+   - Confirma que la URL pública asignada sea `https://torneo-del-pavo.pages.dev` (o anota el subdominio exacto si Cloudflare asignó uno alterno).
+   - Si la URL asignada difiere, ve a **Settings → Environment variables → Production**, edita **`VITE_SITE_URL`** con esa URL exacta (sin `/` al final) y ejecuta **Retry deployment** para que `index.html`, JSON-LD, `robots.txt` y `sitemap.xml` apunten al dominio definitivo.
 6. **(Opcional) Dominio propio:**
    - Registra el dominio o apunta sus DNS a Cloudflare.
-   - En el proyecto de Pages ve a **Custom domains → Set up a custom domain**, escribe el dominio (ej. `torneodelpavo.org`) y espera el certificado SSL activo.
-   - Actualiza **`VITE_SITE_URL`** con `https://tudominio.org`, vuelve a desplegar y actualiza los dominios autorizados en Firebase Auth, reCAPTCHA Enterprise y la restricción HTTP de la API Key (ver [`PASOS-MANUALES.md`](PASOS-MANUALES.md)).
+   - En el proyecto de Pages ve a **Custom domains → Set up a custom domain**, escribe tu dominio propio y espera el certificado SSL activo.
+   - Actualiza **`VITE_SITE_URL`** con tu dominio propio `https://...`, vuelve a desplegar y actualiza los dominios autorizados en Firebase Auth, reCAPTCHA Enterprise y la restricción HTTP de la API Key (ver [`PASOS-MANUALES.md`](PASOS-MANUALES.md)).
 7. **Comprobar ramas y vistas previas:**
    - Crea una rama de prueba o Pull Request, verifica que Cloudflare genere una URL de **Preview** sin modificar producción, y comprueba que **Production** solo cambia al fusionar a `main`.
 
@@ -92,7 +93,7 @@ Si más adelante el comité prefiere que GitHub Actions publique manualmente a C
    npx wrangler pages deploy dist --project-name=torneo-del-pavo --branch=main
    ```
 
-*(Las reglas de Firestore siempre se despliegan por separado con `npx firebase deploy --only firestore:rules,firestore:indexes --project yogic-decoder-5lxdt` desde una sesión autorizada.)*
+*(Las reglas de Firestore siempre se despliegan por separado con `bunx --no-install firebase deploy --only firestore:rules,firestore:indexes --project yogic-decoder-5lxdt` desde una sesión autorizada.)*
 
 ---
 
@@ -133,8 +134,8 @@ Y cambia el comando de despliegue a `npx wrangler deploy`.
 
 | Problema | Causa probable | Solución |
 | --- | --- | --- |
-| **El build falla buscando `package-lock.json` o `npm ci`** | Cloudflare intentó usar `npm` por defecto en lugar de `bun`. | Verifica que el **Build command** sea `bun install --frozen-lockfile && bun run build` y que la variable `BUN_VERSION` esté en `1.4.4`. |
-| **El build falla con error `VITE_SITE_URL es obligatorio`** | Faltó definir `VITE_SITE_URL` en el entorno (Production o Preview). | Agrega `VITE_SITE_URL=https://tu-proyecto.pages.dev` en **Settings → Environment variables** y reintenta el despliegue. |
+| **El build falla buscando `package-lock.json` o `npm ci` o al leer `bun.lock`** | Cloudflare usó `npm` o una versión antigua de Bun sin Build system v3. | Confirma **Build system version: v3**, **Build command** `bun install --frozen-lockfile && bun run build`, `BUN_VERSION=1.4.4` y `NODE_VERSION=22.23.5`. |
+| **El build falla con error `VITE_SITE_URL no está definida`** | Faltó definir `VITE_SITE_URL` en el entorno (Production o Preview). | Agrega `VITE_SITE_URL=https://torneo-del-pavo.pages.dev` en **Settings → Environment variables** y reintenta el despliegue. |
 | **Error 404 al recargar `/admin` o `/participantes`** | Alguien agregó un archivo `public/404.html` o una regla conflictiva en `_redirects`. | Confirma que **no existe** `dist/404.html` ni regla `/* /index.html 200` en `_redirects`. Pages aplica modo SPA automáticamente sin `404.html`. |
 | **La ventana emergente de Google Sign-In no abre o se cierra sola** | Falta el dominio nuevo en Firebase Auth, o se activó `Cross-Origin-Opener-Policy: same-origin`. | Agrega el dominio exacto en **Firebase Console → Authentication → Authorized domains** y verifica en `curl -I` que NO exista cabecera `Cross-Origin-Opener-Policy: same-origin`. |
 | **La consola del navegador reporta un recurso bloqueado por CSP** | Un dominio legítimo nuevo (ej. otro CDN o subdominio de reCAPTCHA) no está permitido en `scripts/security-headers.mjs`. | Revisa el error exacto en DevTools → Console, verifica que el origen sea oficial de Google/Firebase y añádelo únicamente en `scripts/security-headers.mjs` (fuente única de verdad). |

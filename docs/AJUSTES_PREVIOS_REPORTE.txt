@@ -1,0 +1,190 @@
+================================================================================
+TORNEO DEL PAVO 2.0 · CLUB DE AJEDREZ DON GONZALO (DURANGO, DGO.)
+REPORTE DE AJUSTES PREVIOS A CLOUDFLARE PAGES Y CORRECCIÓN DE DESPLIEGUE
+Fecha: 25 de noviembre de 2026
+================================================================================
+
+--------------------------------------------------------------------------------
+1. RESUMEN TABULAR DE AJUSTES (A–I + CORRECCIÓN DE DESPLIEGUE CLOUD RUN)
+--------------------------------------------------------------------------------
+Ajuste | Archivos modificados / eliminados                            | Estado
+-------|------------------------------------------------------------|------------------------
+A      | Eliminado public/assets/aistudio/ (4 archivos .md);        | Corregido y verificado
+       | prebuild en scripts/generate-seo-files.mjs                 | (build + prueba unitaria)
+       | (assertNoForbiddenPublicFiles); prueba en                  |
+       | src/utils/tournamentUtils.test.ts                          |
+-------|------------------------------------------------------------|------------------------
+B      | Movidos a public/img/: cartel-2026.webp, convocatoria.webp | Corregido y verificado
+       | y cartel-2026-og.jpg; eliminada public/assets/; refs en    | (dist/assets solo con
+       | index.html, src/App.tsx, src/components/Hero.tsx y         | hash; dist/img con las 3
+       | SponsorsCarousel.tsx; Cache-Control /img/* (max-age=86400) | imágenes; Playwright OK)
+       | en scripts/security-headers.mjs                            |
+-------|------------------------------------------------------------|------------------------
+C      | package.json (devDependencies: firebase-tools "15.37.0");  | Corregido y verificado
+       | regenerado bun.lock; binario local en                      | (install + bun audit
+       | scripts/run-rules-tests.mjs, .github/workflows/ci.yml,     | limpios; emulador NO
+       | docker-compose.yml, README.md, docs/PASOS-MANUALES.md,     | verificado sin Java)
+       | docs/DESPLIEGUE-CLOUDFLARE.md                              |
+-------|------------------------------------------------------------|------------------------
+D      | src/lib/firebase.ts (ReCaptchaEnterpriseProvider);         | Corregido y verificado
+       | CSP Enterprise confirmada en scripts/security-headers.mjs; | (lint/build/CSP; envío
+       | alineado en README.md y .env.example                       | real de token pendiente
+       |                                                            | de Site Key en consola)
+-------|------------------------------------------------------------|------------------------
+E      | Verificado runtime local (Node 22.23.5 / Bun 1.4.4);       | Corregido en docs
+       | documentado Cloudflare Pages Build system v3,              | (Cloudflare remoto NO
+       | BUN_VERSION=1.4.4 y NODE_VERSION=22.23.5 en                | verificado aquí)
+       | docs/DESPLIEGUE-CLOUDFLARE.md y docs/PASOS-MANUALES.md     |
+-------|------------------------------------------------------------|------------------------
+F      | .github/dependabot.yml (package-ecosystem: "bun")          | Corregido en archivo
+       |                                                            | (GitHub remoto NO
+       |                                                            | verificado aquí)
+-------|------------------------------------------------------------|------------------------
+G      | scripts/security-headers.mjs (X-Robots-Tag: noindex,       | Corregido y verificado
+       | nofollow en /participantes y /participantes/*);            | en _headers, robots.txt,
+       | scripts/generate-seo-files.mjs (fuera de sitemap.xml y     | sitemap.xml y unitarias
+       | robots.txt); documentado y cómo revertir en SECURITY.md,   |
+       | docs/GUIA-ADMIN.md y docs/PRUEBA-DE-HUMO.md                |
+-------|------------------------------------------------------------|------------------------
+H      | scripts/site-config.mjs (constante única DEFAULT_SITE_URL  | Corregido y verificado
+       | = 'https://torneo-del-pavo.pages.dev');                    | (build con/sin env var
+       | scripts/generate-seo-files.mjs; docs/DESPLIEGUE-CLOUDFLARE | + prueba negativa
+       | .md, docs/PASOS-MANUALES.md, docs/GUIA-ADMIN.md,           | STRICT_SITE_URL=1)
+       | docs/PRUEBA-DE-HUMO.md                                     |
+-------|------------------------------------------------------------|------------------------
+I      | docs/PARTE_1_REPORTE.txt (reemplazado correo personal por  | Corregido y verificado
+       | tucorreo@gmail.com); README.md (aviso explícito de que el  | con grep en todo docs/
+       | repositorio en GitHub debe ser privado)                    |
+-------|------------------------------------------------------------|------------------------
+Fix    | vite.config.ts (strict solo en command==='build' &&        | Corregido y verificado
+Deploy | mode==='production', transformIndexHtml order:'pre');      | (npm run build y vite
+Cloud  | scripts/generate-seo-files.mjs (sin !process.env.APPLET_ID | preview sin VITE_SITE_URL
+Run    | en isStrictEnv; sigue fallando con CI=true, CF_PAGES=1,    | responden HTTP 200 OK)
+       | STRICT_SITE_URL=1 o VITE_SITE_URL="")                      |
+
+Notas técnicas clave:
+- Ajuste C (`bun audit --audit-level=high` con `firebase-tools@15.37.0`): reportó
+  0 vulnerabilidades altas/críticas (checked 928 packages, 3 below --audit-level=high).
+  Por tanto, se conservó `firebase-tools@15.37.0` fijada en devDependencies y
+  configurada en bun.lock, usando el binario local `./node_modules/.bin/firebase`.
+- Ajuste D (orígenes CSP verificados en `scripts/security-headers.mjs` para
+  reCAPTCHA Enterprise / Firebase App Check):
+  * script-src: https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/
+  * connect-src: https://firebaseappcheck.googleapis.com https://content-firebaseappcheck.googleapis.com https://www.google.com
+  * frame-src: https://www.google.com https://recaptcha.google.com
+
+--------------------------------------------------------------------------------
+2. SALIDAS REALES DE VERIFICACIÓN EN ESTE ENTORNO
+--------------------------------------------------------------------------------
+
+--- bun run lint ---
+$ tsc --noEmit && eslint .
+
+/app/applet/firestore.rules
+  371:7  warning  Insecure open read rule detected. Warn on open reads in production  @firebase/security-rules/no-open-reads
+  464:7  warning  Insecure open read rule detected. Warn on open reads in production  @firebase/security-rules/no-open-reads
+  471:7  warning  Insecure open read rule detected. Warn on open reads in production  @firebase/security-rules/no-open-reads
+
+✖ 3 problems (0 errors, 3 warnings)
+
+--- bun run test ---
+$ tsx --test src/utils/tournamentUtils.test.ts
+TAP version 13
+# Subtest: computeCountdown calculates exact remaining days, hours, minutes, and seconds
+ok 1 - computeCountdown calculates exact remaining days, hours, minutes, and seconds
+# Subtest: computeCountdown handles elapsed event dates and invalid dates safely
+ok 2 - computeCountdown handles elapsed event dates and invalid dates safely
+# Subtest: shuffleArray preserves all items without mutating original array
+ok 3 - shuffleArray preserves all items without mutating original array
+# Subtest: calculateAgeAtTournament handles exact birthday boundaries and leap year Feb 29
+ok 4 - calculateAgeAtTournament handles exact birthday boundaries and leap year Feb 29
+# Subtest: deriveAgeCutoffs derives dynamic legal and Juvenil cutoffs from fechaIso
+ok 5 - deriveAgeCutoffs derives dynamic legal and Juvenil cutoffs from fechaIso
+# Subtest: toPublicParticipantPayload omits exact age for minors and keeps only range
+ok 6 - toPublicParticipantPayload omits exact age for minors and keeps only range
+# Subtest: validateRegistrationInput enforces receipt, privacy notice, age coherence, future dates, and minor tutor consent
+ok 7 - validateRegistrationInput enforces receipt, privacy notice, age coherence, future dates, and minor tutor consent
+# Subtest: isPlaceholderPaymentConfig detects missing or example payment data reliably
+ok 8 - isPlaceholderPaymentConfig detects missing or example payment data reliably
+# Subtest: validateReceiptFileMeta rejects unsupported mime types and oversized files
+ok 9 - validateReceiptFileMeta rejects unsupported mime types and oversized files
+# Subtest: receiptUtils validates magic bytes, safe data URLs, and file names
+ok 10 - receiptUtils validates magic bytes, safe data URLs, and file names
+# Subtest: generateSecureFolio produces unpredictable 6-char folios
+ok 11 - generateSecureFolio produces unpredictable 6-char folios
+# Subtest: safeHttpUrl and formatWhatsAppUrl block dangerous URL protocols
+ok 12 - safeHttpUrl and formatWhatsAppUrl block dangerous URL protocols
+# Subtest: sanitizeSpreadsheetCell neutralizes formula injection prefixes
+ok 13 - sanitizeSpreadsheetCell neutralizes formula injection prefixes
+# Subtest: sha256Hex and normalization helpers create deterministic duplicate hashes
+ok 14 - sha256Hex and normalization helpers create deterministic duplicate hashes
+# Subtest: findPossibleDuplicates flags matching email, phone, or fuzzy accent-insensitive name
+ok 15 - findPossibleDuplicates flags matching email, phone, or fuzzy accent-insensitive name
+# Subtest: public vs admin exports and Swiss pairing export isolate PII properly
+ok 16 - public vs admin exports and Swiss pairing export isolate PII properly
+# Subtest: classifyAndFormatError returns actionable Spanish messages without leaking internal codes
+ok 17 - classifyAndFormatError returns actionable Spanish messages without leaking internal codes
+# Subtest: buildParticipantNames & validateRegistrationInput handle compound names, particles, apostrophes, hyphens, accents, and umlauts consistently
+ok 18 - buildParticipantNames & validateRegistrationInput handle compound names, particles, apostrophes, hyphens, accents, and umlauts consistently
+# Subtest: security-headers single source of truth enforces Cloudflare Pages limits and safe CSP rules
+ok 19 - security-headers single source of truth enforces Cloudflare Pages limits and safe CSP rules
+# Subtest: generate-seo-files blocks forbidden internal files in public/ and excludes /participantes from robots/sitemap
+ok 20 - generate-seo-files blocks forbidden internal files in public/ and excludes /participantes from robots/sitemap
+1..20
+# tests 20
+# suites 0
+# pass 20
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+
+--- VITE_SITE_URL=https://torneo-del-pavo.pages.dev bun run build ---
+$ node scripts/generate-seo-files.mjs
+✅ SEO y cabeceras generados para https://torneo-del-pavo.pages.dev (public/_headers, robots.txt, sitemap.xml)
+$ vite build
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 2330 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     4.69 kB │ gzip:   1.59 kB
+dist/assets/index-8N9747uR.css                     98.07 kB │ gzip:  13.66 kB
+dist/assets/rolldown-runtime-BCiCTKAo.js            1.30 kB │ gzip:   0.71 kB
+dist/assets/purify.es-Dzkdzyfv.js                  28.50 kB │ gzip:  11.42 kB
+dist/assets/jspdf.plugin.autotable-2eOJeXl-.js     30.30 kB │ gzip:   9.65 kB
+dist/assets/index.es-NQ3yJ1ab.js                  151.41 kB │ gzip:  48.91 kB
+dist/assets/AdminPanel-BKYdZt6H.js                173.07 kB │ gzip:  29.80 kB
+dist/assets/html2canvas-DgyG5QR-.js               199.40 kB │ gzip:  46.74 kB
+dist/assets/jspdf.es.min-DOlymkJp.js              399.68 kB │ gzip: 129.91 kB
+dist/assets/exceljs.min-CDmtrTPY.js               929.38 kB │ gzip: 256.38 kB
+dist/assets/index-B_atv_uI.js                   1,480.27 kB │ gzip: 428.12 kB
+✓ built in 1.64s
+
+--- bun audit --audit-level=high ---
+bun audit v1.4.4 (38afee6c8)
+No vulnerabilities found (checked 928 packages, 3 below --audit-level=high) [126.00ms]
+
+--- Verificaciones adicionales ejecutadas y aprobadas ---
+1. Prueba negativa `STRICT_SITE_URL=1 VITE_SITE_URL="" node scripts/generate-seo-files.mjs`:
+   salió con código 1 y mensaje `❌ Error de compilación: VITE_SITE_URL no está definida...`
+2. Arranque en entorno Cloud Run sin `VITE_SITE_URL` ni `APPLET_ID`:
+   - `env -u VITE_SITE_URL -u APPLET_ID npm run build` compiló sin errores ni avisos de Vite en 1.68s usando `https://torneo-del-pavo.pages.dev`.
+   - `vite preview` sin `VITE_SITE_URL` ni `APPLET_ID` respondió `HTTP/1.1 200 OK` en `/`.
+3. Inventario `dist/`:
+   - `dist/assets/` contiene exclusivamente bundles JS/CSS con hash de contenido (sin imágenes sin hash ni carpeta `aistudio/`).
+   - `dist/img/` contiene `cartel-2026-og.jpg`, `cartel-2026.webp` y `convocatoria.webp`.
+   - `dist/_headers` incluye `/img/*` (`Cache-Control: public, max-age=86400`), `/assets/*` (`immutable`), `/participantes` y `/participantes/*` (`X-Robots-Tag: noindex, nofollow`).
+   - `dist/robots.txt` y `dist/sitemap.xml` omiten `/participantes`.
+4. Navegador headless (`playwright-cli` en `http://localhost:3000` y `/participantes`):
+   0 errores y 0 advertencias en consola; imágenes `/img/*` y consultas públicas a Firestore (`200 OK`).
+
+--------------------------------------------------------------------------------
+3. QUÉ NO SE PUDO VERIFICAR EN ESTE ENTORNO (PENDIENTE FUERA DEL CONTENEDOR)
+--------------------------------------------------------------------------------
+1. Emulador de Cloud Firestore / Auth (`npm run test:rules` y `npm run test:e2e`):
+   no ejecutados aquí porque el contenedor no tiene Java (JRE/JDK 17+). Se ejecutarán automáticamente al subir el repositorio a GitHub Actions (`.github/workflows/ci.yml`).
+2. GitHub remoto (Dependabot `"bun"` en `.github/dependabot.yml`, ejecución real del workflow CI y protección de rama `main`):
+   no verificado porque el proyecto aún no está subido a un repositorio privado de GitHub.
+3. Despliegue real en Cloudflare Pages y App Check con `ReCaptchaEnterpriseProvider` en producción:
+   no verificado en vivo hasta conectar el repositorio a Cloudflare Pages (Build system v3, `BUN_VERSION=1.4.4`, `NODE_VERSION=22.23.5`) y configurar `VITE_RECAPTCHA_SITE_KEY` en consola.

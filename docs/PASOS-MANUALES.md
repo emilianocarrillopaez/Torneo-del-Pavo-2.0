@@ -47,8 +47,8 @@ Las reglas protegen la privacidad de menores, recibos e inscritos.
 
 1. Si hiciste cambios locales a `firestore.rules`, despliégalos siempre apuntando al proyecto correcto (el archivo `firebase.json` ya apunta a la base con nombre):
    ```bash
-   npx firebase login
-   npx firebase deploy --only firestore:rules,firestore:indexes --project yogic-decoder-5lxdt
+   bunx --no-install firebase login
+   bunx --no-install firebase deploy --only firestore:rules,firestore:indexes --project yogic-decoder-5lxdt
    ```
 2. **Verificación visual obligatoria:** entra a **Firebase Console → Build → Firestore Database → base `ai-studio-1b982696-e484-4fe2-a9e1-54984917aae2` → pestaña Reglas** y confirma que la fecha de publicación es reciente y que el contenido coincide con el archivo `firestore.rules` del repositorio (debe incluir las funciones `isValidWaitlistEntry`, `validatePublicRosterMatch` y el filtro Unicode `\\p{L}`).
 
@@ -57,9 +57,9 @@ Las reglas protegen la privacidad de menores, recibos e inscritos.
 ## 4. Publicar el sitio en Cloudflare Pages
 
 El sitio web ya no se publica en Firebase Hosting. Sigue paso a paso la guía [`docs/DESPLIEGUE-CLOUDFLARE.md`](DESPLIEGUE-CLOUDFLARE.md) para:
-1. Conectar tu repositorio de GitHub a **Cloudflare Pages**.
-2. Configurar el comando de compilación (`bun install --frozen-lockfile && bun run build`), la carpeta de salida (`dist`) y las variables (`NODE_VERSION`, `BUN_VERSION`, `VITE_APP_ENV`, `VITE_SITE_URL`).
-3. Anotar la URL pública resultante (`https://tu-proyecto.pages.dev` o tu dominio propio) y volver a desplegar para que `canonical`, `sitemap.xml`, `robots.txt` y las tarjetas de WhatsApp apunten a esa dirección final.
+1. Conectar tu repositorio **privado** de GitHub a **Cloudflare Pages**.
+2. Configurar **Build system v3**, el comando de compilación (`bun install --frozen-lockfile && bun run build`), la carpeta de salida (`dist`) y las variables (`NODE_VERSION=22.23.5`, `BUN_VERSION=1.4.4`, `VITE_APP_ENV=production`, `VITE_SITE_URL=https://torneo-del-pavo.pages.dev`).
+3. Confirmar la URL pública resultante (`https://torneo-del-pavo.pages.dev` o tu dominio propio) y volver a desplegar si cambió, para que `canonical`, `sitemap.xml`, `robots.txt` y las tarjetas de WhatsApp apunten a esa dirección final.
 
 ---
 
@@ -76,7 +76,7 @@ Cada vez que tengas una URL definitiva nueva (`*.pages.dev` y, si aplica, domini
    - Registra esa **Site Key** en **Firebase Console → Build → App Check → Apps** y colócala en la variable `VITE_RECAPTCHA_SITE_KEY` en Cloudflare Pages (y/o en `firebase-applet-config.json`).
 3. **Restricción de la API Key del navegador:**
    - Entra a [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials?project=yogic-decoder-5lxdt).
-   - Abre la clave Web usada por Firebase y en **Application restrictions → Websites (HTTP referrers)** agrega únicamente `https://tu-proyecto.pages.dev/*` y tu dominio propio (`http://localhost:*` déjalo solo mientras desarrolles).
+   - Abre la clave Web usada por Firebase y en **Application restrictions → Websites (HTTP referrers)** agrega únicamente `https://torneo-del-pavo.pages.dev/*` y tu dominio propio si aplica (`http://localhost:*` déjalo solo mientras desarrolles).
 4. **Probar el login de admin bajo la nueva URL** en Chrome de escritorio, Chrome móvil y Safari de iPhone.
 
 ---

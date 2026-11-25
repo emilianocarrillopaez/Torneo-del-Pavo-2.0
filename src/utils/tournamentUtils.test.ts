@@ -498,5 +498,70 @@ test('security-headers single source of truth enforces Cloudflare Pages limits a
     .replace('; upgrade-insecure-requests', '')
     .trim();
   assert.equal(preview['Content-Security-Policy'].trim(), normalizedProd);
+
+  // Ajuste B y G: caché de /img/* y X-Robots-Tag en /participantes
+  assert.ok(headersContent.includes('/img/*\n  Cache-Control: public, max-age=86400'));
+  assert.ok(headersContent.includes('/assets/*\n  Cache-Control: public, max-age=31536000, immutable'));
+  assert.ok(headersContent.includes('/participantes\n  X-Robots-Tag: noindex, nofollow'));
+  assert.ok(headersContent.includes('/participantes/*\n  X-Robots-Tag: noindex, nofollow'));
 });
+
+test('generate-seo-files blocks forbidden internal files in public/ and excludes /participantes from robots/sitemap', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const {
+    assertNoForbiddenPublicFiles,
+    generateSeoAndHeaderFiles,
+    DEFAULT_SITE_URL,
+  } = await import('../../scripts/generate-seo-files.mjs');
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pavo-public-test-'));
+  try {
+    // 1. Válido con robots.txt e img/
+    fs.mkdirSync(path.join(tmpRoot, 'img'), { recursive: true });
+    fs.writeFileSync(path.join(tmpRoot, 'img', 'cartel-2026.webp'), 'ok', 'utf8');
+    fs.writeFileSync(path.join(tmpRoot, 'robots.txt'), 'User-agent: *\n', 'utf8');
+    assert.doesNotThrow(() => assertNoForbiddenPublicFiles(tmpRoot));
+
+    const prevSiteUrl = process.env.VITE_SITE_URL;
+    process.env.VITE_SITE_URL = DEFAULT_SITE_URL;
+    try {
+      const { siteUrl } = generateSeoAndHeaderFiles({ strict: true, publicDir: tmpRoot });
+      assert.equal(siteUrl, 'https://torneo-del-pavo.pages.dev');
+    } finally {
+      if (prevSiteUrl === undefined) delete process.env.VITE_SITE_URL;
+      else process.env.VITE_SITE_URL = prevSiteUrl;
+    }
+
+    const robots = fs.readFileSync(path.join(tmpRoot, 'robots.txt'), 'utf8');
+    const sitemap = fs.readFileSync(path.join(tmpRoot, 'sitemap.xml'), 'utf8');
+    assert.equal(robots.includes('/participantes'), false);
+    assert.equal(sitemap.includes('/participantes'), false);
+    assert.ok(sitemap.includes('https://torneo-del-pavo.pages.dev/'));
+
+    // 2. Bloquea .md, .txt distinto a robots.txt, .log y carpetas aistudio/docs
+    const mdFile = path.join(tmpRoot, 'nota.md');
+    fs.writeFileSync(mdFile, '# secreto', 'utf8');
+    assert.throws(() => assertNoForbiddenPublicFiles(tmpRoot), /nota\.md/);
+    fs.unlinkSync(mdFile);
+
+    const txtFile = path.join(tmpRoot, 'notas.txt');
+    fs.writeFileSync(txtFile, 'secreto', 'utf8');
+    assert.throws(() => assertNoForbiddenPublicFiles(tmpRoot), /notas\.txt/);
+    fs.unlinkSync(txtFile);
+
+    const logFile = path.join(tmpRoot, 'debug.log');
+    fs.writeFileSync(logFile, 'log', 'utf8');
+    assert.throws(() => assertNoForbiddenPublicFiles(tmpRoot), /debug\.log/);
+    fs.unlinkSync(logFile);
+
+    const aistudioDir = path.join(tmpRoot, 'assets', 'aistudio');
+    fs.mkdirSync(aistudioDir, { recursive: true });
+    assert.throws(() => assertNoForbiddenPublicFiles(tmpRoot), /aistudio/);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 

@@ -5,21 +5,25 @@ import { defineConfig, type Plugin } from 'vite';
 import { getPreviewHeaders } from './scripts/security-headers.mjs';
 import { resolveSiteUrl } from './scripts/generate-seo-files.mjs';
 
-function siteUrlHtmlPlugin(mode: string): Plugin {
-  const siteUrl = resolveSiteUrl({ strict: mode === 'production' });
+function siteUrlHtmlPlugin(strict: boolean): Plugin {
+  const siteUrl = resolveSiteUrl({ strict });
   return {
     name: 'torneo-site-url-html',
-    transformIndexHtml(html) {
-      return html.replaceAll('%VITE_SITE_URL%', siteUrl);
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html) {
+        return html.replaceAll('%VITE_SITE_URL%', siteUrl);
+      },
     },
   };
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const allowLocalEmulators = process.env.VITE_USE_FIRESTORE_EMULATOR === 'true';
+  const strictSiteUrl = command === 'build' && mode === 'production';
 
   return {
-    plugins: [react(), tailwindcss(), siteUrlHtmlPlugin(mode)],
+    plugins: [react(), tailwindcss(), siteUrlHtmlPlugin(strictSiteUrl)],
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),

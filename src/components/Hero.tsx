@@ -222,7 +222,7 @@ export const Hero: React.FC<HeroProps> = ({
                   className="relative block w-full rounded-xl overflow-hidden cursor-pointer text-left"
                 >
                   <img
-                    src="/assets/cartel-2026.webp"
+                    src="/img/cartel-2026.webp"
                     alt="Cartel Oficial Torneo del Pavo 2026 - Santa Claus jugando ajedrez con el pavo navideño en Durango"
                     width={800}
                     height={1111}
@@ -407,7 +407,7 @@ export const Hero: React.FC<HeroProps> = ({
               <X size={20} />
             </button>
             <img
-              src="/assets/cartel-2026.webp"
+              src="/img/cartel-2026.webp"
               alt="Cartel Oficial del Torneo del Pavo 2.0 en Durango"
               width={800}
               height={1111}
@@ -460,7 +460,7 @@ export const Hero: React.FC<HeroProps> = ({
 
             <div className="bg-white rounded-xl overflow-hidden shadow-inner">
               <img
-                src="/assets/convocatoria.webp"
+                src="/img/convocatoria.webp"
                 alt="Convocatoria Oficial Carta Torneo del Pavo 2026"
                 width={1080}
                 height={1398}
@@ -472,7 +472,7 @@ export const Hero: React.FC<HeroProps> = ({
 
             <div className="mt-3 text-center">
               <a
-                href="/assets/convocatoria.webp"
+                href="/img/convocatoria.webp"
                 download="Convocatoria_Torneo_del_Pavo_2026.webp"
                 target="_blank"
                 rel="noopener noreferrer"

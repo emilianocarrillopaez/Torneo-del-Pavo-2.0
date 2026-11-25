@@ -10,7 +10,8 @@ Plataforma oficial de convocatoria, inscripción con comprobante de pago, padró
 - **Backend y seguridad:** **Firebase Spark (plan gratuito)** en el proyecto `yogic-decoder-5lxdt`:
   - **Cloud Firestore** en la **base con nombre** `ai-studio-1b982696-e484-4fe2-a9e1-54984917aae2`.
   - **Firebase Authentication** (solo Google Sign-In con correo verificado para administradores).
-  - **Firebase App Check** (reCAPTCHA Enterprise / v3).
+  - **Firebase App Check** (reCAPTCHA Enterprise vía `ReCaptchaEnterpriseProvider`).
+- **Privacidad del repositorio:** **el repositorio en GitHub debe mantenerse como privado** para proteger la documentación operativa del comité y evitar exponer reglas o configuración interna innecesariamente.
 - **Stack:** React 19, Vite 8, TypeScript (`strict: true`), Tailwind CSS 4, ExcelJS, jsPDF.
 
 ---
@@ -64,7 +65,7 @@ bun audit --audit-level=high
 
 1. Arranca el emulador de Firestore y Auth (con Java 17+ o usando `docker compose up emulators`):
    ```bash
-   npx firebase emulators:start --project yogic-decoder-5lxdt --only firestore,auth
+   bunx --no-install firebase emulators:start --project yogic-decoder-5lxdt --only firestore,auth
    ```
 2. En otra terminal, siembra datos sintéticos y levanta la app en modo emulador:
    ```bash
@@ -81,8 +82,8 @@ bun audit --audit-level=high
 - **Sitio web (Cloudflare Pages):** se publica automáticamente desde la rama `main` mediante la integración Git de Cloudflare Pages (comando `bun install --frozen-lockfile && bun run build`, directorio `dist`). Consulta la guía paso a paso en [`docs/DESPLIEGUE-CLOUDFLARE.md`](docs/DESPLIEGUE-CLOUDFLARE.md).
 - **Reglas e índices de Firestore (siempre a la base con nombre):**
   ```bash
-  npx firebase login
-  npx firebase deploy --only firestore:rules,firestore:indexes --project yogic-decoder-5lxdt
+  bunx --no-install firebase login
+  bunx --no-install firebase deploy --only firestore:rules,firestore:indexes --project yogic-decoder-5lxdt
   ```
   El archivo `firebase.json` apunta explícitamente a `"database": "ai-studio-1b982696-e484-4fe2-a9e1-54984917aae2"`. Verifica siempre en *Firebase Console → Firestore → Reglas* que el contenido coincide con `firestore.rules`.
 

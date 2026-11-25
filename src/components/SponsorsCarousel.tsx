@@ -522,7 +522,7 @@ export const SponsorsCarousel: React.FC<SponsorsCarouselProps> = ({ sponsors }) 
 
             <div className="bg-white rounded-xl overflow-hidden p-2">
               <img
-                src="/assets/convocatoria.webp"
+                src="/img/convocatoria.webp"
                 alt="Convocatoria Oficial y Patrocinadores Torneo del Pavo 2026"
                 width={1080}
                 height={1398}

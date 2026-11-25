@@ -281,7 +281,7 @@ export function TournamentApp() {
         '@type': 'Organization',
         name: config.club || 'Club de Ajedrez Don Gonzalo',
       },
-      image: [`${origin}/assets/cartel-2026-og.jpg`],
+      image: [`${origin}/img/cartel-2026-og.jpg`],
       offers: {
         '@type': 'Offer',
         price: String(config.costo || 200),

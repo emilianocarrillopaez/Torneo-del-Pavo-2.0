@@ -99,6 +99,10 @@ export function generateHeadersFileContent() {
       '  Cache-Control: public, max-age=31536000, immutable',
     ].join('\n'),
     [
+      '/img/*',
+      '  Cache-Control: public, max-age=86400',
+    ].join('\n'),
+    [
       '/index.html',
       '  Cache-Control: no-cache',
     ].join('\n'),
@@ -124,6 +128,14 @@ export function generateHeadersFileContent() {
     ].join('\n'),
     [
       '/admin/*',
+      '  X-Robots-Tag: noindex, nofollow',
+    ].join('\n'),
+    [
+      '/participantes',
+      '  X-Robots-Tag: noindex, nofollow',
+    ].join('\n'),
+    [
+      '/participantes/*',
       '  X-Robots-Tag: noindex, nofollow',
     ].join('\n'),
   ];

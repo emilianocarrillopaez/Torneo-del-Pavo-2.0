@@ -9,6 +9,9 @@
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
+/img/*
+  Cache-Control: public, max-age=86400
+
 /index.html
   Cache-Control: no-cache
 
@@ -28,4 +31,10 @@
   X-Robots-Tag: noindex, nofollow
 
 /admin/*
+  X-Robots-Tag: noindex, nofollow
+
+/participantes
+  X-Robots-Tag: noindex, nofollow
+
+/participantes/*
   X-Robots-Tag: noindex, nofollow

@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { initializeAppCheck, ReCaptchaV3Provider, AppCheck } from 'firebase/app-check';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider, AppCheck } from 'firebase/app-check';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import {
   initializeFirestore,
@@ -75,7 +75,7 @@ const configuredSiteKey =
 if (!useEmulator && typeof window !== 'undefined' && configuredSiteKey) {
   try {
     appCheckInstance = initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(configuredSiteKey),
+      provider: new ReCaptchaEnterpriseProvider(configuredSiteKey),
       isTokenAutoRefreshEnabled: true,
     });
   } catch {
