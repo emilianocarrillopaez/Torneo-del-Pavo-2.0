@@ -667,5 +667,235 @@ test('parseJavaMajorVersion parses Java 8, 17, 21+, and invalid outputs accurate
   assert.equal(parseJavaMajorVersion('not-java-output'), null);
 });
 
+test('ci-report.mjs resets reports dir, preserves exit codes, builds concise summary, and blocks secrets', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const {
+    cleanReportsDir,
+    runCommandWithReport,
+    buildJobSummaryMarkdown,
+    writeJobSummary,
+    assertSafeReportsDir,
+  } = await import('../../scripts/ci-report.mjs');
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pavo-cireport-test-'));
+  const reportsDir = path.join(tmpRoot, 'reports');
+  try {
+    // 1. cleanReportsDir limpia contenido previo y recrea subcarpetas
+    fs.mkdirSync(reportsDir, { recursive: true });
+    fs.writeFileSync(path.join(reportsDir, 'viejo.txt'), 'residuo', 'utf8');
+    cleanReportsDir(reportsDir);
+    assert.equal(fs.existsSync(path.join(reportsDir, 'viejo.txt')), false);
+    assert.equal(fs.existsSync(path.join(reportsDir, 'playwright')), true);
+    assert.equal(fs.existsSync(path.join(reportsDir, 'lighthouse')), true);
+
+    // 2. runCommandWithReport guarda salida y preserva código 0 y distinto de 0
+    const okRun = runCommandWithReport({
+      stepName: 'echo-ok',
+      outputFile: 'ok.txt',
+      command: process.execPath,
+      args: ['-e', 'console.log("todo bien")'],
+      reportsDir,
+      echo: false,
+    });
+    assert.equal(okRun.exitCode, 0);
+    assert.match(fs.readFileSync(path.join(reportsDir, 'ok.txt'), 'utf8'), /todo bien/);
+
+    const failRun = runCommandWithReport({
+      stepName: 'fail-step',
+      outputFile: 'lint.txt',
+      command: process.execPath,
+      args: [
+        '-e',
+        'for (let i = 1; i <= 55; i++) console.error("error linea " + i + " token=ghp_1234567890secreto"); process.exit(2);',
+      ],
+      reportsDir,
+      echo: false,
+    });
+    assert.equal(failRun.exitCode, 2);
+
+    // 3. Summary parsea conteos TAP, Playwright JSON, Lighthouse y recorta errores a <= 40 líneas
+    fs.writeFileSync(
+      path.join(reportsDir, 'unit-tests.txt'),
+      '# tests 14\n# pass 14\n# fail 0\n',
+      'utf8'
+    );
+    fs.writeFileSync(
+      path.join(reportsDir, 'rules-tests.txt'),
+      '# tests 34\n# pass 34\n# fail 0\n',
+      'utf8'
+    );
+    fs.writeFileSync(
+      path.join(reportsDir, 'playwright', 'results.json'),
+      JSON.stringify({ stats: { expected: 6, unexpected: 0, flaky: 0, skipped: 0 } }),
+      'utf8'
+    );
+    fs.writeFileSync(
+      path.join(reportsDir, 'audit.txt'),
+      '0 vulnerabilities found\n',
+      'utf8'
+    );
+    fs.writeFileSync(
+      path.join(reportsDir, 'lighthouse', 'manifest.json'),
+      JSON.stringify([
+        {
+          url: 'http://127.0.0.1:4173/',
+          summary: { performance: 0.96, accessibility: 1, 'best-practices': 1, seo: 1 },
+        },
+      ]),
+      'utf8'
+    );
+
+    const failSummary = buildJobSummaryMarkdown({
+      jobName: 'Calidad y Pruebas',
+      status: 'failure',
+      reportsDir,
+    });
+    assert.match(failSummary, /❌ Calidad y Pruebas/);
+    assert.match(failSummary, /14\/14 aprobadas/);
+    assert.match(failSummary, /34\/34 aprobadas/);
+    assert.match(failSummary, /6\/6 aprobadas/);
+    assert.match(failSummary, /\| `\/` \| 96 \| 100 \| 100 \| 100 \|/);
+    assert.equal(failSummary.includes('ghp_1234567890secreto'), false);
+    assert.equal(failSummary.includes('error linea 15 '), false);
+    assert.ok(failSummary.includes('error linea 16 '));
+    assert.ok(failSummary.includes('error linea 55 '));
+
+    const stepSummaryFile = path.join(tmpRoot, 'github_step_summary.md');
+    writeJobSummary({
+      jobName: 'Calidad y Pruebas',
+      status: 'success',
+      reportsDir,
+      stepSummaryPath: stepSummaryFile,
+    });
+    assert.match(fs.readFileSync(path.join(reportsDir, 'resumen.md'), 'utf8'), /✅ Calidad y Pruebas/);
+    assert.match(fs.readFileSync(stepSummaryFile, 'utf8'), /✅ Calidad y Pruebas/);
+
+    // 4. assertSafeReportsDir bloquea tokens, .env y comprobantes base64
+    // Limpiamos lint.txt que contenía ghp_ sintético de prueba arriba antes de validar
+    fs.unlinkSync(path.join(reportsDir, 'lint.txt'));
+    assert.doesNotThrow(() => assertSafeReportsDir(reportsDir));
+
+    fs.writeFileSync(path.join(reportsDir, '.env.leak'), 'SECRET=1', 'utf8');
+    assert.throws(() => assertSafeReportsDir(reportsDir), /\.env\.leak/);
+    fs.unlinkSync(path.join(reportsDir, '.env.leak'));
+
+    fs.writeFileSync(
+      path.join(reportsDir, 'fuga.txt'),
+      'payload=data:image/png;base64,iVBORw0KGgoAAAANS',
+      'utf8'
+    );
+    assert.throws(() => assertSafeReportsDir(reportsDir), /comprobante base64/);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('cleanup-old-artifacts.mjs filters only older completed reportes-* artifacts and mocks API cleanup safely', async () => {
+  const { selectArtifactsToDelete, selectRunsToDelete, runCleanup } = await import(
+    '../../scripts/cleanup-old-artifacts.mjs'
+  );
+
+  const artifacts = [
+    { id: 1, name: 'reportes-calidad', created_at: '2026-11-24T10:00:00Z', workflow_run: { id: 100 } },
+    { id: 2, name: 'reportes-e2e', created_at: '2026-11-24T10:05:00Z', workflow_run: { id: 100 } },
+    { id: 3, name: 'backup-manual', created_at: '2026-11-24T09:00:00Z', workflow_run: { id: 99 } },
+    { id: 4, name: 'reportes-calidad', created_at: '2026-11-25T09:50:00Z', workflow_run: { id: 150 } },
+    { id: 5, name: 'reportes-calidad', created_at: '2026-11-25T10:01:00Z', workflow_run: { id: 200 } },
+    { id: 6, name: 'reportes-reglas', created_at: '2026-11-25T10:02:00Z', workflow_run: { id: 201 } },
+  ];
+
+  const selected = selectArtifactsToDelete({
+    artifacts,
+    currentRunId: 200,
+    currentRunStartedAt: '2026-11-25T10:00:00Z',
+    activeRunIds: new Set(['150']),
+  });
+
+  // Solo 1 y 2 deben borrarse (3 no tiene prefijo reportes-, 4 está activo, 5 es actual, 6 es posterior)
+  assert.deepEqual(
+    selected.map((a) => a.id),
+    [1, 2]
+  );
+
+  // selectRunsToDelete conserva actual (200) y la última completada (180), borrando 120 y 100
+  const runs = [
+    { id: 200, status: 'in_progress', created_at: '2026-11-25T10:00:00Z' },
+    { id: 190, status: 'queued', created_at: '2026-11-25T09:55:00Z' },
+    { id: 180, status: 'completed', created_at: '2026-11-25T09:00:00Z' },
+    { id: 120, status: 'completed', created_at: '2026-11-24T18:00:00Z' },
+    { id: 100, status: 'completed', created_at: '2026-11-24T10:00:00Z' },
+  ];
+  assert.deepEqual(
+    selectRunsToDelete({ runs, currentRunId: 200 }).map((r) => r.id),
+    [120, 100]
+  );
+
+  // Simulación completa de runCleanup con fetch mockeado (sin llamadas de red reales)
+  const originalFetch = globalThis.fetch;
+  const deletedUrls: string[] = [];
+  const prevEnv = {
+    GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY,
+    GITHUB_RUN_ID: process.env.GITHUB_RUN_ID,
+    GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+    CLEANUP_OLD_RUNS: process.env.CLEANUP_OLD_RUNS,
+    GITHUB_STEP_SUMMARY: process.env.GITHUB_STEP_SUMMARY,
+  };
+
+  process.env.GITHUB_REPOSITORY = 'org/repo';
+  process.env.GITHUB_RUN_ID = '200';
+  process.env.GITHUB_TOKEN = 'fake-test-token';
+  process.env.CLEANUP_OLD_RUNS = 'false';
+  delete process.env.GITHUB_STEP_SUMMARY;
+
+  globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+    const u = String(url);
+    if (init?.method === 'DELETE') {
+      deletedUrls.push(u);
+      return new Response(null, { status: 204 });
+    }
+    if (u.endsWith('/actions/runs/200')) {
+      return new Response(
+        JSON.stringify({ id: 200, workflow_id: 77, run_started_at: '2026-11-25T10:00:00Z' }),
+        { status: 200 }
+      );
+    }
+    if (u.includes('/actions/runs?status=in_progress')) {
+      return new Response(JSON.stringify({ workflow_runs: [{ id: 150 }] }), { status: 200 });
+    }
+    if (u.includes('/actions/runs?status=')) {
+      return new Response(JSON.stringify({ workflow_runs: [] }), { status: 200 });
+    }
+    if (u.includes('/actions/artifacts')) {
+      return new Response(JSON.stringify({ artifacts }), { status: 200 });
+    }
+    return new Response('{}', { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    const res = await runCleanup({ dryRun: false });
+    assert.equal(res.deletedArtifacts, 2);
+    assert.equal(res.deletedRuns, 0);
+    assert.deepEqual(deletedUrls, [
+      'https://api.github.com/repos/org/repo/actions/artifacts/1',
+      'https://api.github.com/repos/org/repo/actions/artifacts/2',
+    ]);
+
+    // Manejo elegante si GitHub responde 403 (ej. PR sin permiso actions:write)
+    globalThis.fetch = (async () => new Response('Forbidden', { status: 403 })) as typeof fetch;
+    const forbiddenRes = await runCleanup({ dryRun: false });
+    assert.equal(forbiddenRes.deletedArtifacts, 0);
+    assert.equal(forbiddenRes.status, 403);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [k, v] of Object.entries(prevEnv)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+
 
 

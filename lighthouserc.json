@@ -5,7 +5,7 @@
         "http://127.0.0.1:4173/",
         "http://127.0.0.1:4173/participantes"
       ],
-      "startServerCommand": "npx vite preview --port 4173 --host 127.0.0.1",
+      "startServerCommand": "./node_modules/.bin/vite preview --port 4173 --host 127.0.0.1",
       "startServerReadyPattern": "Local:",
       "numberOfRuns": 1,
       "settings": {
@@ -21,7 +21,8 @@
       }
     },
     "upload": {
-      "target": "temporary-public-storage"
+      "target": "filesystem",
+      "outputDir": "reports/lighthouse"
     }
   }
 }

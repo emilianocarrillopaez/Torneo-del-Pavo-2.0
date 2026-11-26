@@ -14,7 +14,12 @@ export default defineConfig({
   expect: {
     timeout: 15_000,
   },
-  reporter: [['list'], ['html', { open: 'never' }]],
+  outputDir: './reports/playwright/test-results',
+  reporter: [
+    ['list'],
+    ['html', { outputFolder: './reports/playwright/html', open: 'never' }],
+    ['json', { outputFile: './reports/playwright/results.json' }],
+  ],
   use: {
     baseURL: process.env.E2E_BASE_URL || 'http://127.0.0.1:4173',
     trace: 'on-first-retry',

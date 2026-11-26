@@ -11,6 +11,7 @@
     "preview": "vite preview --port=3000 --host=0.0.0.0",
     "start": "vite preview --port=3000 --host=0.0.0.0",
     "clean": "rm -rf dist public/_headers",
+    "reports:clean": "node scripts/ci-report.mjs --clean",
     "lint": "tsc --noEmit && eslint .",
     "lint:rules": "eslint firestore.rules",
     "test": "tsx --test src/utils/tournamentUtils.test.ts",

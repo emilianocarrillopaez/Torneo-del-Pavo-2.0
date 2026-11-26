@@ -54,8 +54,9 @@ bun run preview
 # Calidad, tipos, reglas y pruebas
 bun run lint          # tsc --noEmit + eslint
 bun run lint:rules    # @firebase/eslint-plugin-security-rules sobre firestore.rules
-bun run test          # Pruebas unitarias (incluye cabeceras, Wrangler, Java 21 y Unicode)
+bun run test          # Pruebas unitarias (incluye cabeceras, Wrangler, Java 21, reportes CI y Unicode)
 bun run check:wrangler # Valida wrangler.jsonc y ausencia de dist/404.html
+bun run reports:clean # Reinicia localmente la carpeta reports/ (gitignorada)
 npm run test:rules    # Pruebas de reglas Firestore en emulador (requiere Java 21+ o Docker)
 npm run test:e2e      # Pruebas Playwright + axe-core contra build local y emulador
 bun audit --audit-level=high
@@ -99,6 +100,7 @@ bun audit --audit-level=high
 - `src/utils/`: validadores puros, cortes de edad dinámicos, magia binaria de comprobantes y exportación segura (`exceljs`, `jspdf`).
 - `scripts/security-headers.mjs`: **única fuente de verdad** para CSP y cabeceras HTTP (`public/_headers` y `vite preview`).
 - `scripts/generate-seo-files.mjs`: script `prebuild` que genera `public/_headers`, `public/robots.txt` y `public/sitemap.xml` desde `VITE_SITE_URL` y falla si falta en producción.
+- `scripts/ci-report.mjs` y `scripts/cleanup-old-artifacts.mjs`: generación de reportes CI (`reports/`), resúmenes en `$GITHUB_STEP_SUMMARY` y limpieza no incremental de artefactos anteriores.
 - `tests/rules/firestore.rules.test.ts`: suite de seguridad (34 vectores `V1–V34`).
 - `tests/e2e/app.spec.ts`: flujos Playwright + `axe-core`.
-- `docs/`: guías operativas para el comité organizador ([ver índice en `docs/PASOS-MANUALES.md`](docs/PASOS-MANUALES.md)).
+- `docs/`: guías operativas para el comité organizador ([ver índice en `docs/PASOS-MANUALES.md`](docs/PASOS-MANUALES.md) y [guía de reportes CI en `docs/REPORTES-CI.md`](docs/REPORTES-CI.md)).
