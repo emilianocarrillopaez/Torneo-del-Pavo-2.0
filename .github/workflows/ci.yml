@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Descargar código
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v7.0.1
 
       - name: Configurar Node.js 22
         uses: actions/setup-node@v4.3.0
@@ -114,7 +114,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Descargar código
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v7.0.1
 
       - name: Configurar Node.js 22
         uses: actions/setup-node@v4.3.0
@@ -164,7 +164,7 @@ jobs:
     needs: [quality-and-build, firestore-rules]
     steps:
       - name: Descargar código
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v7.0.1
 
       - name: Configurar Node.js 22
         uses: actions/setup-node@v4.3.0
@@ -262,7 +262,7 @@ jobs:
       contents: read
     steps:
       - name: Descargar código
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v7.0.1
 
       - name: Configurar Node.js 22
         uses: actions/setup-node@v4.3.0
@@ -286,7 +286,7 @@ jobs:
 #    needs: [quality-and-build, firestore-rules, e2e-and-lighthouse]
 #    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_CI_RULES_DEPLOY == 'true'
 #    steps:
-#      - uses: actions/checkout@v4.2.2
+#      - uses: actions/checkout@v7.0.1
 #      - uses: google-github-actions/auth@v2
 #        with:
 #          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
