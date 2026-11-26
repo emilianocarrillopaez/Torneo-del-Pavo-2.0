@@ -101,7 +101,7 @@ jobs:
 
       - name: Subir reportes de calidad y build
         if: always()
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: reportes-calidad
           path: reports/
@@ -150,7 +150,7 @@ jobs:
 
       - name: Subir reportes de reglas Firestore
         if: always()
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: reportes-reglas
           path: reports/
@@ -243,7 +243,7 @@ jobs:
 
       - name: Subir reportes E2E y Lighthouse
         if: always()
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: reportes-e2e
           path: reports/
