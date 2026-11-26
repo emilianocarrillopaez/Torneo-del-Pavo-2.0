@@ -2,38 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { generateHeadersFileContent } from './security-headers.mjs';
-import { DEFAULT_SITE_URL } from './site-config.mjs';
+import { resolveSiteUrl } from './site-config.mjs';
 
-export { DEFAULT_SITE_URL };
+export { resolveSiteUrl };
 
 const FORBIDDEN_PUBLIC_DIR_NAMES = new Set(['aistudio', 'docs']);
 const FORBIDDEN_PUBLIC_EXTENSIONS = new Set(['.md', '.log']);
-
-function readEnvFileVar(key) {
-  const candidates = ['.env.local', '.env.production', '.env'];
-  for (const filename of candidates) {
-    const filePath = path.resolve(process.cwd(), filename);
-    if (!fs.existsSync(filePath)) continue;
-    const raw = fs.readFileSync(filePath, 'utf8');
-    for (const line of raw.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eqIdx = trimmed.indexOf('=');
-      if (eqIdx === -1) continue;
-      const k = trimmed.slice(0, eqIdx).trim();
-      if (k !== key) continue;
-      let val = trimmed.slice(eqIdx + 1).trim();
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1);
-      }
-      return val;
-    }
-  }
-  return undefined;
-}
 
 export function assertNoForbiddenPublicFiles(publicDir) {
   if (!fs.existsSync(publicDir)) return;
@@ -70,52 +44,6 @@ export function assertNoForbiddenPublicFiles(publicDir) {
       `❌ Archivos o carpetas internas detectadas dentro de public/: ${offenders.join(', ')}. Elimínalos antes de compilar para no publicarlos en dist/.`
     );
   }
-}
-
-export function resolveSiteUrl({ strict = true } = {}) {
-  const explicit = process.env.VITE_SITE_URL;
-  const fromEnvFile = explicit === undefined ? readEnvFileVar('VITE_SITE_URL') : undefined;
-  const raw = (explicit ?? fromEnvFile ?? '').trim();
-
-  // Falla estrictamente en CI, Cloudflare (Workers/Pages), STRICT_SITE_URL=1 o si se dejó vacía explícitamente.
-  // En vista previa o contenedores sin esas variables (p. ej. Cloud Run npm run start), usa DEFAULT_SITE_URL.
-  const isStrictEnv =
-    strict &&
-    (explicit === '' ||
-      process.env.CI === 'true' ||
-      process.env.CF_PAGES === '1' ||
-      process.env.WORKERS_CI === '1' ||
-      process.env.STRICT_SITE_URL === '1');
-
-  if (!raw) {
-    if (isStrictEnv) {
-      throw new Error(
-        `❌ Error de compilación: VITE_SITE_URL no está definida. Configúrala en Cloudflare / GitHub Actions / .env (ej. VITE_SITE_URL=${DEFAULT_SITE_URL}) antes de compilar producción.`
-      );
-    }
-    console.warn(
-      `⚠️  VITE_SITE_URL no definida; usando URL canónica por defecto ${DEFAULT_SITE_URL}.`
-    );
-    return DEFAULT_SITE_URL;
-  }
-
-  let parsed;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    throw new Error(
-      `❌ Error de compilación: VITE_SITE_URL ("${raw}") no es una URL válida (debe iniciar con https://).`
-    );
-  }
-
-  const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
-  if (parsed.protocol !== 'https:' && !isLocalhost) {
-    throw new Error(
-      `❌ Error de compilación: VITE_SITE_URL ("${raw}") debe usar protocolo https:// en producción.`
-    );
-  }
-
-  return raw.replace(/\/+$/, '');
 }
 
 export function generateSeoAndHeaderFiles({ strict = true, publicDir: customPublicDir = '' } = {}) {

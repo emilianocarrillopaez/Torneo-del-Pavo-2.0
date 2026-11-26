@@ -45,8 +45,8 @@ npm run seed:emulator
 # Ensayo de carga (~100 registros consecutivos) contra el emulador
 npm run loadtest:emulator
 
-# Compilación de producción (ejecuta prebuild: genera public/_headers, robots.txt y sitemap.xml)
-VITE_SITE_URL=https://torneo-del-pavo.pages.dev bun run build
+# Compilación de producción (lee site.config.json o VITE_SITE_URL opcional; genera public/_headers, robots.txt y sitemap.xml)
+bun run build
 
 # Vista previa local con las mismas cabeceras CSP que Cloudflare Workers (sin HSTS/upgrade en HTTP)
 bun run preview
@@ -98,8 +98,10 @@ bun audit --audit-level=high
 - `src/hooks/`: `useRegistrationForm`, `useParticipants`, `useFocusTrap`.
 - `src/services/tournamentService.ts`: acceso a Firestore, caché en sesión del padrón público y operaciones admin en lotes fragmentados.
 - `src/utils/`: validadores puros, cortes de edad dinámicos, magia binaria de comprobantes y exportación segura (`exceljs`, `jspdf`).
+- `site.config.json`: URL pública oficial del sitio (`https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev`). La variable `VITE_SITE_URL` es **opcional** (solo sobrescribe este archivo); si algún día cambia la URL, edita `site.config.json` y haz commit.
+- `scripts/site-config.mjs`: resolución compartida de URL pública (`VITE_SITE_URL` opcional → `site.config.json` → error en modo estricto si ambas faltan o son inválidas).
 - `scripts/security-headers.mjs`: **única fuente de verdad** para CSP y cabeceras HTTP (`public/_headers` y `vite preview`).
-- `scripts/generate-seo-files.mjs`: script `prebuild` que genera `public/_headers`, `public/robots.txt` y `public/sitemap.xml` desde `VITE_SITE_URL` y falla si falta en producción.
+- `scripts/generate-seo-files.mjs`: script `prebuild` que genera `public/_headers`, `public/robots.txt` y `public/sitemap.xml` usando `scripts/site-config.mjs`.
 - `scripts/ci-report.mjs` y `scripts/cleanup-old-artifacts.mjs`: generación de reportes CI (`reports/`), resúmenes en `$GITHUB_STEP_SUMMARY` y limpieza no incremental de artefactos anteriores.
 - `tests/rules/firestore.rules.test.ts`: suite de seguridad (34 vectores `V1–V34`).
 - `tests/e2e/app.spec.ts`: flujos Playwright + `axe-core`.

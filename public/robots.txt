@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 Disallow: /admin
-Sitemap: https://torneo-del-pavo.pages.dev/sitemap.xml
+Sitemap: https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/sitemap.xml

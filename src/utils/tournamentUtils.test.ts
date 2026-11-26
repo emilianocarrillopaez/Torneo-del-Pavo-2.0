@@ -506,60 +506,191 @@ test('security-headers single source of truth enforces Cloudflare Pages limits a
   assert.ok(headersContent.includes('/participantes/*\n  X-Robots-Tag: noindex, nofollow'));
 });
 
-test('generate-seo-files blocks forbidden internal files in public/ and excludes /participantes from robots/sitemap', async () => {
+test('site-config.mjs resolves VITE_SITE_URL > site.config.json, enforces strict validation, and rejects placeholders/trailing slashes', async () => {
   const fs = await import('node:fs');
   const os = await import('node:os');
   const path = await import('node:path');
+  const { resolveSiteUrl } = await import('../../scripts/site-config.mjs');
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pavo-sitecfg-test-'));
+  const configPath = path.join(tmpRoot, 'site.config.json');
+  const expectedRepoUrl = 'https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev';
+
+  try {
+    fs.writeFileSync(configPath, JSON.stringify({ siteUrl: expectedRepoUrl }), 'utf8');
+
+    // 1. Con variable de entorno válida -> usa la del entorno (sobrescribe site.config.json)
+    assert.equal(
+      resolveSiteUrl({
+        strict: true,
+        envSiteUrl: 'https://custom.torneopavo.mx',
+        configPath,
+        allowEnvFiles: false,
+      }),
+      'https://custom.torneopavo.mx'
+    );
+
+    // 2. Sin variable de entorno pero con site.config.json válido -> usa el archivo
+    assert.equal(
+      resolveSiteUrl({
+        strict: true,
+        envSiteUrl: undefined,
+        configPath,
+        allowEnvFiles: false,
+      }),
+      expectedRepoUrl
+    );
+    assert.equal(
+      resolveSiteUrl({
+        strict: true,
+        envSiteUrl: '',
+        configPath,
+        allowEnvFiles: false,
+      }),
+      expectedRepoUrl
+    );
+
+    // 3. Sin ninguna válida en modo estricto -> falla con mensaje claro en español
+    const missingConfigPath = path.join(tmpRoot, 'no-existe.json');
+    assert.throws(
+      () =>
+        resolveSiteUrl({
+          strict: true,
+          envSiteUrl: undefined,
+          configPath: missingConfigPath,
+          allowEnvFiles: false,
+        }),
+      /site\.config\.json.*VITE_SITE_URL/
+    );
+
+    // 4. Con PEGA_AQUI, sin https://, con barra final, example, localhost o pages.dev -> falla en modo estricto
+    const invalidCases = [
+      'https://PEGA_AQUI.workers.dev',
+      'http://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev',
+      'https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/',
+      'https://example.com',
+      'https://localhost:4173',
+      'https://torneo-del-pavo.pages.dev',
+    ];
+    for (const badUrl of invalidCases) {
+      assert.throws(
+        () =>
+          resolveSiteUrl({
+            strict: true,
+            envSiteUrl: badUrl,
+            configPath,
+            allowEnvFiles: false,
+          }),
+        /Error de compilación/
+      );
+    }
+
+    // También falla si site.config.json contiene valor inválido
+    const badConfigPath = path.join(tmpRoot, 'bad-site.config.json');
+    fs.writeFileSync(badConfigPath, JSON.stringify({ siteUrl: 'https://PEGA_AQUI.workers.dev/' }), 'utf8');
+    assert.throws(
+      () =>
+        resolveSiteUrl({
+          strict: true,
+          envSiteUrl: undefined,
+          configPath: badConfigPath,
+          allowEnvFiles: false,
+        }),
+      /site\.config\.json/
+    );
+
+    // En modo no estricto de desarrollo permite http://localhost
+    assert.equal(
+      resolveSiteUrl({
+        strict: false,
+        envSiteUrl: 'http://localhost:3000',
+        configPath,
+        allowEnvFiles: false,
+      }),
+      'http://localhost:3000'
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('generate-seo-files blocks forbidden internal files in public/, excludes /participantes, and real Vite build without VITE_SITE_URL outputs site.config.json URL', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { build } = await import('vite');
   const {
     assertNoForbiddenPublicFiles,
     generateSeoAndHeaderFiles,
-    DEFAULT_SITE_URL,
   } = await import('../../scripts/generate-seo-files.mjs');
 
+  const expectedRepoUrl = 'https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev';
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pavo-public-test-'));
+  const tmpPublic = path.join(tmpRoot, 'public');
+  const tmpOut = path.join(tmpRoot, 'dist');
+  fs.mkdirSync(tmpPublic, { recursive: true });
+
+  const prevSiteUrl = process.env.VITE_SITE_URL;
+  delete process.env.VITE_SITE_URL;
+
   try {
-    // 1. Válido con robots.txt e img/
-    fs.mkdirSync(path.join(tmpRoot, 'img'), { recursive: true });
-    fs.writeFileSync(path.join(tmpRoot, 'img', 'cartel-2026.webp'), 'ok', 'utf8');
-    fs.writeFileSync(path.join(tmpRoot, 'robots.txt'), 'User-agent: *\n', 'utf8');
-    assert.doesNotThrow(() => assertNoForbiddenPublicFiles(tmpRoot));
+    // 1. Válido con img/ y sin VITE_SITE_URL -> usa site.config.json
+    fs.mkdirSync(path.join(tmpPublic, 'img'), { recursive: true });
+    fs.writeFileSync(path.join(tmpPublic, 'img', 'cartel-2026.webp'), 'ok', 'utf8');
+    assert.doesNotThrow(() => assertNoForbiddenPublicFiles(tmpPublic));
 
-    const prevSiteUrl = process.env.VITE_SITE_URL;
-    process.env.VITE_SITE_URL = DEFAULT_SITE_URL;
-    try {
-      const { siteUrl } = generateSeoAndHeaderFiles({ strict: true, publicDir: tmpRoot });
-      assert.equal(siteUrl, 'https://torneo-del-pavo.pages.dev');
-    } finally {
-      if (prevSiteUrl === undefined) delete process.env.VITE_SITE_URL;
-      else process.env.VITE_SITE_URL = prevSiteUrl;
-    }
+    const { siteUrl } = generateSeoAndHeaderFiles({ strict: true, publicDir: tmpPublic });
+    assert.equal(siteUrl, expectedRepoUrl);
 
-    const robots = fs.readFileSync(path.join(tmpRoot, 'robots.txt'), 'utf8');
-    const sitemap = fs.readFileSync(path.join(tmpRoot, 'sitemap.xml'), 'utf8');
+    const robots = fs.readFileSync(path.join(tmpPublic, 'robots.txt'), 'utf8');
+    const sitemap = fs.readFileSync(path.join(tmpPublic, 'sitemap.xml'), 'utf8');
     assert.equal(robots.includes('/participantes'), false);
     assert.equal(sitemap.includes('/participantes'), false);
-    assert.ok(sitemap.includes('https://torneo-del-pavo.pages.dev/'));
+    assert.ok(robots.includes(`Sitemap: ${expectedRepoUrl}/sitemap.xml`));
+    assert.ok(sitemap.includes(`<loc>${expectedRepoUrl}/</loc>`));
 
-    // 2. Bloquea .md, .txt distinto a robots.txt, .log y carpetas aistudio/docs
-    const mdFile = path.join(tmpRoot, 'nota.md');
+    // 2. Build real sin VITE_SITE_URL -> dist/index.html, dist/robots.txt y dist/sitemap.xml usan site.config.json
+    await build({
+      root: process.cwd(),
+      mode: 'production',
+      logLevel: 'silent',
+      publicDir: tmpPublic,
+      build: {
+        outDir: tmpOut,
+        emptyOutDir: true,
+      },
+    });
+
+    const builtHtml = fs.readFileSync(path.join(tmpOut, 'index.html'), 'utf8');
+    const builtRobots = fs.readFileSync(path.join(tmpOut, 'robots.txt'), 'utf8');
+    const builtSitemap = fs.readFileSync(path.join(tmpOut, 'sitemap.xml'), 'utf8');
+    assert.equal(builtHtml.includes('%VITE_SITE_URL%'), false);
+    assert.ok(builtHtml.includes(`${expectedRepoUrl}/`));
+    assert.ok(builtRobots.includes(`Sitemap: ${expectedRepoUrl}/sitemap.xml`));
+    assert.ok(builtSitemap.includes(`<loc>${expectedRepoUrl}/</loc>`));
+
+    // 3. Bloquea .md, .txt distinto a robots.txt, .log y carpetas aistudio/docs
+    const mdFile = path.join(tmpPublic, 'nota.md');
     fs.writeFileSync(mdFile, '# secreto', 'utf8');
-    assert.throws(() => assertNoForbiddenPublicFiles(tmpRoot), /nota\.md/);
+    assert.throws(() => assertNoForbiddenPublicFiles(tmpPublic), /nota\.md/);
     fs.unlinkSync(mdFile);
 
-    const txtFile = path.join(tmpRoot, 'notas.txt');
+    const txtFile = path.join(tmpPublic, 'notas.txt');
     fs.writeFileSync(txtFile, 'secreto', 'utf8');
-    assert.throws(() => assertNoForbiddenPublicFiles(tmpRoot), /notas\.txt/);
+    assert.throws(() => assertNoForbiddenPublicFiles(tmpPublic), /notas\.txt/);
     fs.unlinkSync(txtFile);
 
-    const logFile = path.join(tmpRoot, 'debug.log');
+    const logFile = path.join(tmpPublic, 'debug.log');
     fs.writeFileSync(logFile, 'log', 'utf8');
-    assert.throws(() => assertNoForbiddenPublicFiles(tmpRoot), /debug\.log/);
+    assert.throws(() => assertNoForbiddenPublicFiles(tmpPublic), /debug\.log/);
     fs.unlinkSync(logFile);
 
-    const aistudioDir = path.join(tmpRoot, 'assets', 'aistudio');
+    const aistudioDir = path.join(tmpPublic, 'assets', 'aistudio');
     fs.mkdirSync(aistudioDir, { recursive: true });
-    assert.throws(() => assertNoForbiddenPublicFiles(tmpRoot), /aistudio/);
+    assert.throws(() => assertNoForbiddenPublicFiles(tmpPublic), /aistudio/);
   } finally {
+    if (prevSiteUrl === undefined) delete process.env.VITE_SITE_URL;
+    else process.env.VITE_SITE_URL = prevSiteUrl;
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });

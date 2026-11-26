@@ -60,17 +60,21 @@ jobs:
           set -o pipefail
           bun run test 2>&1 | tee reports/unit-tests.txt
 
-      - name: Verificar bloqueo de build si falta VITE_SITE_URL
+      - name: Verificar bloqueo de build si la URL del sitio es inválida
         run: |
-          if STRICT_SITE_URL=1 VITE_SITE_URL="" node scripts/generate-seo-files.mjs >/dev/null 2>&1; then
-            echo "La compilación debió fallar sin VITE_SITE_URL."
+          if STRICT_SITE_URL=1 VITE_SITE_URL="https://PEGA_AQUI.workers.dev" node scripts/generate-seo-files.mjs >/dev/null 2>&1; then
+            echo "La compilación debió fallar con marcador PEGA_AQUI."
+            exit 1
+          fi
+          if STRICT_SITE_URL=1 VITE_SITE_URL="https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/" node scripts/generate-seo-files.mjs >/dev/null 2>&1; then
+            echo "La compilación debió fallar con barra final (/)."
             exit 1
           fi
 
       - name: Compilar producción para Cloudflare
         shell: bash
         env:
-          VITE_SITE_URL: ${{ vars.VITE_SITE_URL || 'https://torneo-del-pavo.pages.dev' }}
+          VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
           VITE_APP_ENV: production
           STRICT_SITE_URL: '1'
         run: |
@@ -85,6 +89,24 @@ jobs:
           test -f dist/img/cartel-2026.webp
           test ! -e dist/404.html
           test ! -d dist/assets/aistudio
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import { resolveSiteUrl } from "./scripts/site-config.mjs";
+            const expected = resolveSiteUrl({ strict: true });
+            const html = fs.readFileSync("dist/index.html", "utf8");
+            const robots = fs.readFileSync("dist/robots.txt", "utf8");
+            const sitemap = fs.readFileSync("dist/sitemap.xml", "utf8");
+            if (!html.includes(`${expected}/`) || html.includes("%VITE_SITE_URL%")) {
+              throw new Error(`dist/index.html no contiene la URL esperada (${expected})`);
+            }
+            if (!robots.includes(`Sitemap: ${expected}/sitemap.xml`)) {
+              throw new Error(`dist/robots.txt no contiene la URL esperada (${expected})`);
+            }
+            if (!sitemap.includes(`<loc>${expected}/</loc>`)) {
+              throw new Error(`dist/sitemap.xml no contiene la URL esperada (${expected})`);
+            }
+            console.log(`✅ dist/index.html, dist/robots.txt y dist/sitemap.xml verificados con ${expected}`);
+          '
 
       - name: Verificar configuración Wrangler y empaque estático (dry-run)
         shell: bash
@@ -197,7 +219,6 @@ jobs:
           VITE_USE_FIRESTORE_EMULATOR: 'true'
           VITE_APP_ENV: staging
           VITE_SITE_URL: http://127.0.0.1:4173
-          STRICT_SITE_URL: '1'
         run: |
           set -o pipefail
           bun run build 2>&1 | tee reports/build.txt
@@ -224,7 +245,7 @@ jobs:
       - name: Compilar producción para Lighthouse CI
         shell: bash
         env:
-          VITE_SITE_URL: ${{ vars.VITE_SITE_URL || 'https://torneo-del-pavo.pages.dev' }}
+          VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
           VITE_APP_ENV: production
           STRICT_SITE_URL: '1'
         run: |

@@ -3,10 +3,9 @@ import react from '@vitejs/plugin-react';
 import path from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 import { getPreviewHeaders } from './scripts/security-headers.mjs';
-import { resolveSiteUrl } from './scripts/generate-seo-files.mjs';
+import { resolveSiteUrl } from './scripts/site-config.mjs';
 
-function siteUrlHtmlPlugin(strict: boolean): Plugin {
-  const siteUrl = resolveSiteUrl({ strict });
+function siteUrlHtmlPlugin(siteUrl: string): Plugin {
   return {
     name: 'torneo-site-url-html',
     transformIndexHtml: {
@@ -20,10 +19,15 @@ function siteUrlHtmlPlugin(strict: boolean): Plugin {
 
 export default defineConfig(({ command, mode }) => {
   const allowLocalEmulators = process.env.VITE_USE_FIRESTORE_EMULATOR === 'true';
-  const strictSiteUrl = command === 'build' && mode === 'production';
+  const strictSiteUrl = command === 'build' && mode === 'production' && !allowLocalEmulators;
+  const resolvedSiteUrl = resolveSiteUrl({ strict: strictSiteUrl });
+  process.env.VITE_SITE_URL = resolvedSiteUrl;
 
   return {
-    plugins: [react(), tailwindcss(), siteUrlHtmlPlugin(strictSiteUrl)],
+    plugins: [react(), tailwindcss(), siteUrlHtmlPlugin(resolvedSiteUrl)],
+    define: {
+      'import.meta.env.VITE_SITE_URL': JSON.stringify(resolvedSiteUrl),
+    },
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),

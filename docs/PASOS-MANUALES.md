@@ -56,28 +56,35 @@ Las reglas protegen la privacidad de menores, recibos e inscritos.
 
 ## 4. Publicar el sitio en Cloudflare Workers
 
-El sitio web ya no se publica en Firebase Hosting. Sigue paso a paso la guía [`docs/DESPLIEGUE-CLOUDFLARE.md`](DESPLIEGUE-CLOUDFLARE.md) para:
+El sitio web ya no se publica en Firebase Hosting. La URL pública oficial vive en **`site.config.json`** (`https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev`), por lo que la variable `VITE_SITE_URL` del panel de Cloudflare es **opcional** (solo sirve para sobrescribirla). Si algún día cambia la URL del sitio, edita `site.config.json` y haz commit a `main`.
+
+Sigue la guía [`docs/DESPLIEGUE-CLOUDFLARE.md`](DESPLIEGUE-CLOUDFLARE.md) para:
 1. Conectar tu repositorio **privado** de GitHub al Worker **`torneo-del-pavo-2-0`** en **Cloudflare Workers**.
-2. Configurar **Build command:** `bun run build`, **Deploy command:** `npx wrangler deploy`, **Root directory** vacío y las **Build Variables** (`NODE_VERSION=22.23.5`, `BUN_VERSION=1.4.4`, `VITE_APP_ENV=production`, `VITE_SITE_URL=<URL real>`).
-3. Confirmar la URL pública `.workers.dev` (o tu dominio propio) en *Settings → Domains & Routes* y volver a desplegar si cambió, para que `canonical`, `sitemap.xml`, `robots.txt` y las tarjetas de WhatsApp apunten a esa dirección final.
+2. Configurar **Build command:** `bun run build`, **Deploy command:** `npx wrangler deploy`, **Root directory** vacío y las **Build Variables** (`NODE_VERSION=22.23.5`, `BUN_VERSION=1.4.4`, `VITE_APP_ENV=production`; `VITE_SITE_URL` es opcional).
+3. Confirmar que el despliegue sirvió `https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev` y que `canonical`, `sitemap.xml`, `robots.txt` y las tarjetas de WhatsApp apuntan a esa dirección.
 
 ---
 
 ## 5. Configuración posterior al cambio de dominio (obligatoria)
 
-Cada vez que tengas una URL definitiva nueva (`*.pages.dev` y, si aplica, dominio propio):
+El dominio oficial publicado del Worker es **`torneo-del-pavo-2-0.club-don-gonzalo.workers.dev`**. Configúralo en los siguientes 3 lugares (y repítelo si algún día agregas un dominio propio):
 
 1. **Firebase Auth → Dominios autorizados:**
    - Entra a **Firebase Console → Build → Authentication → Settings → Authorized domains**.
-   - Agrega tu dominio `.workers.dev` y, si contrataste dominio propio, agrégalo también (con y sin `www` si aplica).
+   - Agrega exactamente este dominio (**sin** `https://`):
+     `torneo-del-pavo-2-0.club-don-gonzalo.workers.dev`
    - **Elimina los dominios temporales de desarrollo** (`ais-dev-*`, `ais-pre-*`) una vez que termines la migración a Cloudflare Workers.
 2. **reCAPTCHA Enterprise (para App Check):**
-   - Entra a [Google Cloud Console → reCAPTCHA Enterprise](https://console.cloud.google.com/security/recaptcha?project=yogic-decoder-5lxdt) (o reCAPTCHA Admin) y crea/edita la clave de sitio agregando tu dominio `.workers.dev` y dominio propio.
+   - Entra a [Google Cloud Console → reCAPTCHA Enterprise](https://console.cloud.google.com/security/recaptcha?project=yogic-decoder-5lxdt) (o reCAPTCHA Admin) y crea/edita la clave de sitio agregando exactamente el dominio (**sin** `https://`):
+     `torneo-del-pavo-2-0.club-don-gonzalo.workers.dev`
    - Registra esa **Site Key** en **Firebase Console → Build → App Check → Apps** y colócala en la variable `VITE_RECAPTCHA_SITE_KEY` en Cloudflare Workers (*Build Variables*) y/o en `firebase-applet-config.json`.
 3. **Restricción de la API Key del navegador:**
    - Entra a [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials?project=yogic-decoder-5lxdt).
-   - Abre la clave Web usada por Firebase y en **Application restrictions → Websites (HTTP referrers)** agrega únicamente `https://torneo-del-pavo.pages.dev/*` y tu dominio propio si aplica (`http://localhost:*` déjalo solo mientras desarrolles).
-4. **Probar el login de admin bajo la nueva URL** en Chrome de escritorio, Chrome móvil y Safari de iPhone.
+   - Abre la clave Web usada por Firebase y en **Application restrictions → Websites (HTTP referrers)** agrega exactamente (**con** `https://` y `/*`):
+     `https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/*`
+     *(y tu dominio propio si aplica; deja `http://localhost:*` solo mientras desarrolles)*.
+4. **Probar el login de admin bajo la URL oficial** (`https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/admin`) en Chrome de escritorio, Chrome móvil y Safari de iPhone.
+   - **Aviso importante sobre URLs de vista previa (*Preview URLs*):** las URLs temporales de vista previa generadas por Cloudflare para ramas o Pull Requests tienen otro subdominio distinto y **no están autorizadas** en Firebase Auth, reCAPTCHA ni en la API Key, por lo que **el login de `/admin` no funciona ahí** (es el comportamiento esperado por seguridad).
 
 ---
 

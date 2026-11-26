@@ -1,0 +1,111 @@
+================================================================================
+REPORTE FINAL — URL PÚBLICA EN REPOSITORIO (sin depender del panel de Cloudflare)
+Torneo del Pavo 2.0 — Club de Ajedrez Don Gonzalo
+URL oficial configurada: https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev
+================================================================================
+
+1. TABLA RESUMEN DE CAMBIOS (1–5)
+--------------------------------------------------------------------------------
+Cambio | Archivos                                                          | Estado
+-------+-------------------------------------------------------------------+-------------------------
+1      | site.config.json (raíz, tracked en git, no en .gitignore)         | Corregido y verificado
+2      | scripts/site-config.mjs, scripts/generate-seo-files.mjs           | Corregido y verificado
+3      | vite.config.ts, index.html (canonical, OG, Twitter, JSON-LD),     | Corregido y verificado
+       | dist/index.html, dist/robots.txt, dist/sitemap.xml, dist/_headers |
+4      | src/utils/tournamentUtils.test.ts (subtests 20 y 21)              | Corregido y verificado
+5      | .github/workflows/ci.yml, .env.example, README.md,                | Corregido (build real en Cloudflare y CI remoto sin verificar)
+       | docs/DESPLIEGUE-CLOUDFLARE.md, docs/PASOS-MANUALES.md             |
+
+--------------------------------------------------------------------------------
+2. SALIDAS REALES DE VERIFICACIÓN (SIN DEFINIR VITE_SITE_URL)
+--------------------------------------------------------------------------------
+
+--- A) bun run lint ---
+$ tsc --noEmit && eslint .
+
+/app/applet/firestore.rules
+  371:7  warning  Insecure open read rule detected. Warn on open reads in production  @firebase/security-rules/no-open-reads
+  464:7  warning  Insecure open read rule detected. Warn on open reads in production  @firebase/security-rules/no-open-reads
+  471:7  warning  Insecure open read rule detected. Warn on open reads in production  @firebase/security-rules/no-open-reads
+
+✖ 3 problems (0 errors, 3 warnings)
+
+--- B) bun run test ---
+$ tsx --test src/utils/tournamentUtils.test.ts
+TAP version 13
+ok 1..25 (incluye:
+  - ok 20: site-config.mjs resolves VITE_SITE_URL > site.config.json, enforces strict validation, and rejects placeholders/trailing slashes
+  - ok 21: generate-seo-files blocks forbidden internal files in public/, excludes /participantes, and real Vite build without VITE_SITE_URL outputs site.config.json URL)
+# tests 25
+# suites 0
+# pass 25
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4111.300569
+
+--- C) env -u VITE_SITE_URL bun run build ---
+$ node scripts/generate-seo-files.mjs
+✅ SEO y cabeceras generados para https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev (public/_headers, robots.txt, sitemap.xml)
+$ vite build
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 2330 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     4.83 kB │ gzip:   1.61 kB
+dist/assets/index-8N9747uR.css                     98.07 kB │ gzip:  13.66 kB
+dist/assets/rolldown-runtime-BCiCTKAo.js            1.30 kB │ gzip:   0.71 kB
+dist/assets/purify.es-Dzkdzyfv.js                  28.50 kB │ gzip:  11.42 kB
+dist/assets/jspdf.plugin.autotable-2eOJeXl-.js     30.30 kB │ gzip:   9.65 kB
+dist/assets/index.es-DA4SENRy.js                  151.41 kB │ gzip:  48.91 kB
+dist/assets/AdminPanel-DiKSSY7W.js                173.07 kB │ gzip:  29.80 kB
+dist/assets/html2canvas-DgyG5QR-.js               199.40 kB │ gzip:  46.74 kB
+dist/assets/jspdf.es.min-BYSAGguK.js              399.68 kB │ gzip: 129.91 kB
+dist/assets/exceljs.min-CDmtrTPY.js               929.38 kB │ gzip: 256.38 kB
+dist/assets/index-C-TnLh4W.js                   1,480.30 kB │ gzip: 428.14 kB
+✓ built in 1.73s
+
+--- D) Inspección de dist/index.html, dist/robots.txt, dist/sitemap.xml y bundle JS ---
+Línea canonical en dist/index.html (líneas 12–15):
+    <link
+      rel="canonical"
+      href="https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/"
+    />
+
+Otras etiquetas verificadas en dist/index.html:
+- og:url:       https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/
+- og:image:     https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/img/cartel-2026-og.jpg
+- twitter:image:https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/img/cartel-2026-og.jpg
+- JSON-LD image:https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/img/cartel-2026-og.jpg
+- JSON-LD url:  https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/#registro
+- Bundle JS (dist/assets/index-C-TnLh4W.js): contiene "https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev" vía import.meta.env.VITE_SITE_URL.
+
+dist/robots.txt:
+User-agent: *
+Allow: /
+Disallow: /admin
+Sitemap: https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/sitemap.xml
+
+dist/sitemap.xml:
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.com/schemas/sitemap/0.9">
+  <url>
+    <loc>https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
+
+--------------------------------------------------------------------------------
+3. LO QUE NO SE PUDO VERIFICAR EN ESTE ENTORNO
+--------------------------------------------------------------------------------
+- El build y despliegue reales dentro del panel de Cloudflare Workers (sin acceso
+  a tu cuenta de Cloudflare ni a secretos/variables del panel).
+- La ejecución remota completa de `.github/workflows/ci.yml` en GitHub Actions
+  (incluido `wrangler deploy --dry-run` remoto, emulador Java 21, E2E y Lighthouse).
+- El alta manual del dominio `torneo-del-pavo-2-0.club-don-gonzalo.workers.dev`
+  en Firebase Auth (*Dominios autorizados*), Google Cloud reCAPTCHA Enterprise y
+  restricciones HTTP de la API Key (documentado en `docs/PASOS-MANUALES.md`).
+================================================================================

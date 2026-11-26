@@ -41,16 +41,23 @@ Sigue estos pasos en el orden exacto:
      ```
      `not_found_handling: "single-page-application"` hace que rutas profundas como `/admin` y `/participantes` respondan `index.html` al recargar sin crear `404.html`.
 
-3. **Variables de build (*Build Variables and Secrets*):**
-   - Entra a **Settings → Build → Build Variables and Secrets** (**NO** en las variables de ejecución / *Runtime Variables*, porque Vite y `prebuild` leen estas variables durante la compilación).
-   - Agrega exactamente estas 4 variables:
+3. **URL pública en `site.config.json` y variables de build (*Build Variables and Secrets*):**
+   - La URL pública oficial del sitio **ya vive en `site.config.json`** en la raíz del repositorio:
+     ```json
+     {
+       "siteUrl": "https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev"
+     }
+     ```
+   - Gracias a esto, **el build no depende de `VITE_SITE_URL` en el panel de Cloudflare**. Si algún día cambia la URL oficial (por ejemplo al agregar un dominio propio), simplemente **edita `site.config.json` y haz commit** a `main`.
+   - La variable `VITE_SITE_URL` en Cloudflare pasa a ser **opcional** (sirve únicamente para sobrescribir `site.config.json` en un entorno puntual).
+   - Entra a **Settings → Build → Build Variables and Secrets** (**NO** en *Runtime Variables*) y configura:
 
-   | Variable | Valor exacto |
-   | --- | --- |
-   | `NODE_VERSION` | `22.23.5` |
-   | `BUN_VERSION` | `1.4.4` |
-   | `VITE_SITE_URL` | `<URL real>` *(tu URL pública `https://...workers.dev` visible en Settings → Domains & Routes, sin `/` al final)* |
-   | `VITE_APP_ENV` | `production` |
+   | Variable | Valor exacto | Obligatoria |
+   | --- | --- | --- |
+   | `NODE_VERSION` | `22.23.5` | Sí |
+   | `BUN_VERSION` | `1.4.4` | Sí |
+   | `VITE_APP_ENV` | `production` | Sí |
+   | `VITE_SITE_URL` | `https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev` | **Opcional** (solo si quieres sobrescribir `site.config.json`) |
 
    - *(Opcional cuando ya tengas App Check listo)*: agrega también en *Build Variables and Secrets* la variable `VITE_RECAPTCHA_SITE_KEY` con la Site Key de reCAPTCHA Enterprise.
    - *Nota sobre versiones:* fijar `BUN_VERSION=1.4.4` (igual que `.github/workflows/ci.yml`) y `NODE_VERSION=22.23.5` (`.node-version`) garantiza que Cloudflare lea el formato de texto de `bun.lock` sin fallos.
@@ -60,18 +67,17 @@ Sigue estos pasos en el orden exacto:
    - **NO fusiones ese Pull Request** (el repositorio ya incluye `wrangler.jsonc` exacto para Static Assets SPA). Ciérralo directamente.
 
 5. **Configuración obligatoria después del primer despliegue (URL `.workers.dev`):**
-   - Una vez completado el despliegue, copia la URL pública definitiva en tu Worker → **Settings → Domains & Routes** (empieza con `https://` y termina en `.workers.dev`).
-   - Verifica que `VITE_SITE_URL` en **Settings → Build → Build Variables and Secrets** tenga esa URL exacta y dispara un nuevo despliegue si la acabas de actualizar.
-   - Agrega esa URL `.workers.dev` en los 3 puntos de seguridad (ver detalles en [`docs/PASOS-MANUALES.md`](PASOS-MANUALES.md)):
-     1. **Firebase Auth → Settings → Authorized domains**: añade el dominio `.workers.dev`.
-     2. **Google Cloud Console → reCAPTCHA Enterprise**: añade el dominio `.workers.dev` a tu Site Key.
-     3. **Google Cloud Console → APIs & Services → Credentials**: restringe tu API Key Web de navegador al referrer `https://<tu-worker>.workers.dev/*`.
+   - La URL pública definitiva del Worker es **`https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev`** (visible en **Settings → Domains & Routes**).
+   - Agrega el dominio `torneo-del-pavo-2-0.club-don-gonzalo.workers.dev` en los 3 puntos de seguridad (ver detalles en [`docs/PASOS-MANUALES.md`](PASOS-MANUALES.md)):
+     1. **Firebase Auth → Settings → Authorized domains**: añade `torneo-del-pavo-2-0.club-don-gonzalo.workers.dev` (**sin** `https://`).
+     2. **Google Cloud Console → reCAPTCHA Enterprise**: añade `torneo-del-pavo-2-0.club-don-gonzalo.workers.dev` a tu Site Key.
+     3. **Google Cloud Console → APIs & Services → Credentials**: restringe tu API Key Web de navegador al referrer `https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev/*`.
    - **Prueba el login de `/admin`** con tu cuenta autorizada en **Chrome de escritorio** y en un **teléfono celular** (Android Chrome / iPhone Safari).
-   - **Importante sobre vistas previa (*Preview URLs*):** las URLs de vista previa generadas por ramas o Pull Requests **no están autorizadas** en Firebase Auth ni en las restricciones HTTP de la API Key, por lo que **el login de `/admin` no funciona ahí** (es esperado por seguridad).
+   - **Importante sobre vistas previas (*Preview URLs*):** las URLs de vista previa generadas por ramas o Pull Requests en Cloudflare tienen otro subdominio y **no están autorizadas** en Firebase Auth, reCAPTCHA ni en las restricciones HTTP de la API Key, por lo que **el login de `/admin` no funciona ahí** (es esperado por seguridad).
 
 6. **(Opcional) Dominio propio:**
    - En tu Worker ve a **Settings → Domains & Routes → + Add → Custom domain**, captura tu dominio propio y espera a que el certificado SSL quede activo.
-   - Actualiza `VITE_SITE_URL` en *Build Variables and Secrets*, vuelve a desplegar y añade el dominio propio en Firebase Auth, reCAPTCHA Enterprise y restricción HTTP de la API Key.
+   - Edita `site.config.json` con el nuevo dominio (con `https://` y sin `/` final), haz commit a `main` y añade ese dominio en Firebase Auth, reCAPTCHA Enterprise y restricción HTTP de la API Key.
 
 ---
 
@@ -95,7 +101,7 @@ Como Cloudflare despliega automáticamente cada cambio que llega a `main`, exige
 Si en algún momento necesitas publicar `./dist` directamente con Wrangler (con `CLOUDFLARE_API_TOKEN` con permiso mínimo *Workers Scripts → Edit* y `CLOUDFLARE_ACCOUNT_ID`):
 
 ```bash
-VITE_SITE_URL=<URL real> VITE_APP_ENV=production STRICT_SITE_URL=1 bun run build
+VITE_APP_ENV=production STRICT_SITE_URL=1 bun run build
 bun run check:wrangler
 bunx --no-install wrangler deploy
 ```
@@ -119,13 +125,13 @@ Si una actualización en `main` rompe la página o muestra un error tras publica
 
 | Error / Síntoma | Causa probable | Solución |
 | --- | --- | --- |
-| **`VITE_SITE_URL no está definida`** | La variable se colocó en *Runtime Variables* en lugar de *Build Variables*, tiene otro nombre o quedó vacía. | Ve a **Settings → Build → Build Variables and Secrets**, define exactamente `VITE_SITE_URL=<URL real>` (sin `/` al final) y vuelve a desplegar. |
-| **`Directory "./dist" does not exist`** | Falló `bun run build` antes de ejecutar `npx wrangler deploy`, o el *Build command* está vacío/equivocado. | Revisa el log de compilación arriba del error, confirma **Build command** = `bun run build` y **Root directory** vacío, y corrige la variable faltante. |
+| **`No se encontró una URL pública válida` o URL inválida** | Se borró/dañó `site.config.json` o la variable opcional `VITE_SITE_URL` tiene `PEGA_AQUI`, `http://` o barra final `/`. | Verifica que `site.config.json` tenga `"siteUrl": "https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev"` (sin `/` final) o corrige/elimina `VITE_SITE_URL` en *Build Variables*. |
+| **`Directory "./dist" does not exist`** | Falló `bun run build` antes de ejecutar `npx wrangler deploy`, o el *Build command* está vacío/equivocado. | Revisa el log de compilación arriba del error, confirma **Build command** = `bun run build` y **Root directory** vacío. |
 | **El despliegue falla porque el nombre del Worker no coincide** | El Worker en Cloudflare tiene otro nombre distinto de `torneo-del-pavo-2-0`. | Crea/renombra el Worker como `torneo-del-pavo-2-0` o confirma que `"name"` en `wrangler.jsonc` coincide letra por letra con el nombre en el panel de Cloudflare. |
 | **Falta `wrangler.jsonc` o ruta `/admin` / `/participantes` da 404** | Se eliminó `wrangler.jsonc`, falta `not_found_handling: "single-page-application"`, o se creó `dist/404.html`. | Ejecuta `bun run check:wrangler`, asegúrate de conservar `wrangler.jsonc` exacto en la raíz y confirma que no existe `public/404.html` ni `dist/404.html`. |
 | **Fallo al instalar paquetes por versión de Bun o lockfile** | Cloudflare intentó usar `npm ci` o una versión antigua de Bun incompatible con `bun.lock` en texto. | Verifica en **Settings → Build → Build Variables and Secrets** que `BUN_VERSION=1.4.4` y `NODE_VERSION=22.23.5` estén configuradas. |
 | **La consola del navegador reporta recurso bloqueado por CSP** | Un origen legítimo nuevo (ej. subdominio de Firebase/reCAPTCHA) no está listado en `scripts/security-headers.mjs`. | Revisa el origen exacto en DevTools → Console, verifica que sea oficial de Google/Firebase, agrégalo únicamente en `scripts/security-headers.mjs`, recompila (`bun run build`) y despliega. |
-| **El login de Google Sign-In no funciona en `/admin`** | Falta el dominio `.workers.dev` en Firebase Auth → *Authorized domains*, falta el referrer en la API Key, o estás probando en una *Preview URL*. | Prueba siempre desde la URL final `.workers.dev` (nunca en *Preview URLs*), agrega el dominio en Firebase Auth y Google Cloud API Key, y confirma que no exista `Cross-Origin-Opener-Policy: same-origin` en `dist/_headers`. |
+| **El login de Google Sign-In no funciona en `/admin`** | Falta `torneo-del-pavo-2-0.club-don-gonzalo.workers.dev` en Firebase Auth → *Authorized domains*, falta el referrer en la API Key, o estás probando en una *Preview URL*. | Prueba siempre desde `https://torneo-del-pavo-2-0.club-don-gonzalo.workers.dev` (nunca en *Preview URLs*), agrega el dominio en Firebase Auth y Google Cloud API Key, y confirma que no exista `Cross-Origin-Opener-Policy: same-origin` en `dist/_headers`. |
 
 ---
 
@@ -133,5 +139,5 @@ Si una actualización en `main` rompe la página o muestra un error tras publica
 
 Si el comité decidiera en otra edición crear un proyecto clásico de **Cloudflare Pages** en lugar de **Cloudflare Workers (Static Assets)**:
 1. En **Workers & Pages → Crear → Pages → Conectar a Git**, selecciona la rama `main`, **Build system version: v3**, **Build command:** `bun install --frozen-lockfile && bun run build`, **Build output directory:** `dist`.
-2. Configura las mismas variables (`NODE_VERSION=22.23.5`, `BUN_VERSION=1.4.4`, `VITE_APP_ENV=production`, `VITE_SITE_URL`) en *Settings → Environment variables*.
+2. Configura las mismas variables (`NODE_VERSION=22.23.5`, `BUN_VERSION=1.4.4`, `VITE_APP_ENV=production` y, opcionalmente si difiere de `site.config.json`, `VITE_SITE_URL`) en *Settings → Environment variables*.
 3. Conserva `dist/_headers`, `dist/robots.txt`, `dist/sitemap.xml` y recuerda **no** crear `public/404.html`.
